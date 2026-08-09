@@ -145,10 +145,11 @@ la M02 🖨️</textarea>
   <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
 
   <div id="status" class="status">Enciende la M02 (3 s) y tenla cerca.</div>
+  <div id="dbg" style="margin-top:6px;font-size:10px;letter-spacing:.08em;color:var(--ink-soft)">toques de Imprimir: 0</div>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v10</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v11</b>
   </div>
 </main>
 
@@ -159,6 +160,7 @@ const cv=$("preview"), ctx=cv.getContext("2d",{willReadFrequently:true});
 let mode="text", proc="threshold", align="center", img=null, writeChar=null, device=null;
 let printing=false;   // candado: un toque = una sola impresión
 let abort=false;      // bandera para detener el envío en curso
+let taps=0;           // diagnóstico: cuántas veces se disparó Imprimir
 
 const setStatus=(m,c="")=>{$("status").textContent=m;$("status").className="status "+c;};
 
@@ -280,9 +282,7 @@ function buildStream(packed,H){
     parts.push(packed.subarray(y*RB,(y+n)*RB));
     y+=n;
   }
-  parts.push([0x1b,0x64,0x03]);       // avanza 3 líneas para el corte
-  parts.push([0x1b,0x64,0x03]);
-  parts.push([0x1b,0x40]);            // ESC @  reset final: limpia estado residual
+  parts.push([0x1b,0x64,0x02]);       // avanza 2 líneas (mínimo, sin reset)
   let len=0; parts.forEach(p=>len+=p.length);
   const buf=new Uint8Array(len); let o=0;
   parts.forEach(p=>{buf.set(p,o); o+=p.length;});
@@ -321,6 +321,7 @@ $("connect").onclick=async()=>{
     if(!writeChar) throw new Error("No encontré un canal de escritura. Pásame el reporte del inspector.");
     $("dot").classList.add("on"); $("conn").textContent=device.name||"Conectada";
     $("print").disabled=false;
+    $("stop").style.display="block";   // Detener siempre disponible tras conectar
     setStatus("Conectada. Lista para imprimir.","ok");
   }catch(err){
     if(err.name==="NotFoundError") setStatus("Cancelado o no elegiste impresora.");
@@ -332,6 +333,7 @@ function onDisc(){writeChar=null;$("dot").classList.remove("on");$("conn").textC
 
 // ---- imprimir ----
 $("print").onclick=async()=>{
+  taps++; const dbg=$("dbg"); if(dbg) dbg.textContent="toques de Imprimir: "+taps;
   if(!writeChar || printing) return;   // ignora toques repetidos mientras imprime
   const p=pack();
   if(!p){setStatus("Elige una imagen primero.","err");return;}
@@ -366,7 +368,7 @@ $("print").onclick=async()=>{
     }
     setStatus(abort ? "Detenido." : `¡Listo! ${copies} copia${copies>1?"s":""} · ${p.H} líneas.`, abort?"err":"ok");
   }catch(err){ setStatus("Error al imprimir: "+(err.message||err.name||err),"err"); }
-  finally{ printing=false; $("print").disabled=false; $("stop").style.display="none"; }
+  finally{ printing=false; $("print").disabled=false; }   // Detener sigue visible
 };
 
 // ---- detener envío ----
