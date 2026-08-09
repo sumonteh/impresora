@@ -136,6 +136,8 @@ la M02 🖨️</textarea>
   <div class="preview-wrap">
     <div class="preview-cap">Vista previa (tamaño real de impresión)</div>
     <canvas id="preview" width="384" height="200"></canvas>
+    <div id="sizeInfo" style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+         color:var(--ink-soft);margin-top:12px">—</div>
   </div>
 
   <button id="connect" class="act">⟐ Conectar impresora</button>
@@ -146,7 +148,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v8</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v9</b>
   </div>
 </main>
 
@@ -192,6 +194,9 @@ $("file").onchange=e=>{
 // ---- render al canvas 384 de ancho ----
 function render(){
   if(mode==="text") renderText(); else renderImage();
+  const el=$("sizeInfo");
+  if(el) el.textContent = cv.height+" líneas · "+(RB*cv.height/1024).toFixed(1)+" KB · "+
+    (RB*cv.height + 20)+" B totales";
 }
 function renderText(){
   const size=+$("fs").value, pad=8, lh=Math.round(size*1.25);
