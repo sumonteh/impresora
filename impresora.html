@@ -140,12 +140,13 @@ la M02 🖨️</textarea>
 
   <button id="connect" class="act">⟐ Conectar impresora</button>
   <button id="print" class="act print" disabled>▐ Imprimir</button>
+  <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
 
   <div id="status" class="status">Enciende la M02 (3 s) y tenla cerca.</div>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v7</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v8</b>
   </div>
 </main>
 
@@ -155,6 +156,7 @@ const $=id=>document.getElementById(id);
 const cv=$("preview"), ctx=cv.getContext("2d",{willReadFrequently:true});
 let mode="text", proc="threshold", align="center", img=null, writeChar=null, device=null;
 let printing=false;   // candado: un toque = una sola impresión
+let abort=false;      // bandera para detener el envío en curso
 
 const setStatus=(m,c="")=>{$("status").textContent=m;$("status").className="status "+c;};
 
@@ -329,10 +331,11 @@ $("print").onclick=async()=>{
   const p=pack();
   if(!p){setStatus("Elige una imagen primero.","err");return;}
   const copies=Math.max(1,Math.min(10, parseInt($("copies").value,10)||1));
+  const stream=buildStream(p.out,p.H);
+  const kb=(stream.length/1024).toFixed(1);
   try{
-    printing=true;
-    $("print").disabled=true;
-    const stream=buildStream(p.out,p.H);
+    printing=true; abort=false;
+    $("print").disabled=true; $("stop").style.display="block";
     // Escritura CON respuesta si el equipo la permite: cada trozo se confirma
     // (ACK) por el equipo, así garantizamos orden y no perder bytes por BLE.
     const reliable = writeChar.properties.write;
@@ -340,21 +343,30 @@ $("print").onclick=async()=>{
     // Margen para que la copia termine de imprimirse físicamente (avance del
     // papel) antes de mandar la siguiente, y no se encabalguen.
     const settle=Math.min(5000, 400 + p.H*5);
-    for(let c=1;c<=copies;c++){
-      for(let i=0;i<stream.length;i+=CHUNK){
+    for(let c=1;c<=copies && !abort;c++){
+      for(let i=0;i<stream.length && !abort;i+=CHUNK){
         const part=stream.subarray(i,i+CHUNK);
         if(reliable) await writeChar.writeValue(part);
         else         await writeChar.writeValueWithoutResponse(part);
         if(!reliable) await new Promise(r=>setTimeout(r,24));
         const pct=Math.min(100,Math.round((i+CHUNK)/stream.length*100));
-        setStatus(`Copia ${c}/${copies} — enviando… ${pct}%`);
+        setStatus(`Copia ${c}/${copies} · ${p.H} líneas · ${kb} KB — ${pct}%`);
       }
-      setStatus(`Copia ${c}/${copies} impresa.`,"ok");
-      if(c<copies) await new Promise(r=>setTimeout(r,settle));
+      if(!abort){
+        setStatus(`Copia ${c}/${copies} impresa.`,"ok");
+        if(c<copies) await new Promise(r=>setTimeout(r,settle));
+      }
     }
-    setStatus(`¡Listo! ${copies} copia${copies>1?"s":""} impresa${copies>1?"s":""}.`,"ok");
+    setStatus(abort ? "Detenido." : `¡Listo! ${copies} copia${copies>1?"s":""} · ${p.H} líneas.`, abort?"err":"ok");
   }catch(err){ setStatus("Error al imprimir: "+(err.message||err.name||err),"err"); }
-  finally{ printing=false; $("print").disabled=false; }
+  finally{ printing=false; $("print").disabled=false; $("stop").style.display="none"; }
+};
+
+// ---- detener envío ----
+$("stop").onclick=async()=>{
+  abort=true;
+  setStatus("Deteniendo…","err");
+  try{ if(writeChar) await writeChar.writeValue(new Uint8Array([0x1b,0x40])); }catch(e){}
 };
 
 render();
