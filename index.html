@@ -279,9 +279,16 @@ function buildStream(packed,H){
 $("connect").onclick=async()=>{
   try{
     setStatus("Elige tu impresora (M02 o número de serie Qxxx)…");
+    // Bluefy (iOS) NO acepta UUIDs numéricos cortos (0xff00); van en forma larga de 128 bits.
     device=await navigator.bluetooth.requestDevice({
       acceptAllDevices:true,
-      optionalServices:[0xff00,"0000ff00-0000-1000-8000-00805f9b34fb",0xff02,0x18f0,0xae30]
+      optionalServices:[
+        "0000ff00-0000-1000-8000-00805f9b34fb",  // servicio principal M02
+        "0000ff02-0000-1000-8000-00805f9b34fb",  // característica de escritura
+        "000018f0-0000-1000-8000-00805f9b34fb",  // variantes Phomemo
+        "0000ae30-0000-1000-8000-00805f9b34fb",
+        "49535343-fe7d-4ae5-8fa9-9fafd205e455"   // UART transparente (algunos firmwares)
+      ]
     });
     device.addEventListener("gattserverdisconnected",onDisc);
     const server=await device.gatt.connect();
@@ -302,8 +309,8 @@ $("connect").onclick=async()=>{
     $("print").disabled=false;
     setStatus("Conectada. Lista para imprimir.","ok");
   }catch(err){
-    if(err.name==="NotFoundError") setStatus("Cancelado.");
-    else setStatus("Error: "+err.message,"err");
+    if(err.name==="NotFoundError") setStatus("Cancelado o no elegiste impresora.");
+    else setStatus("Error: "+(err.message||err.name||err),"err");
   }
 };
 function onDisc(){writeChar=null;$("dot").classList.remove("on");$("conn").textContent="Sin conectar";
@@ -327,7 +334,7 @@ $("print").onclick=async()=>{
       setStatus(`Enviando… ${Math.min(100,Math.round(i/stream.length*100))}%`);
     }
     setStatus("¡Listo! Impreso.","ok");
-  }catch(err){ setStatus("Error al imprimir: "+err.message,"err"); }
+  }catch(err){ setStatus("Error al imprimir: "+(err.message||err.name||err),"err"); }
   finally{ $("print").disabled=false; }
 };
 
