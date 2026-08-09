@@ -149,6 +149,7 @@ const WIDTH=384, RB=48;               // 384 puntos = 48 bytes por línea
 const $=id=>document.getElementById(id);
 const cv=$("preview"), ctx=cv.getContext("2d",{willReadFrequently:true});
 let mode="text", proc="threshold", align="center", img=null, writeChar=null, device=null;
+let printing=false;   // candado: un toque = una sola impresión
 
 const setStatus=(m,c="")=>{$("status").textContent=m;$("status").className="status "+c;};
 
@@ -259,7 +260,6 @@ function buildStream(packed,H){
   const parts=[];
   parts.push([0x1b,0x40]);            // ESC @  inicializa
   parts.push([0x1b,0x61,0x01]);       // ESC a  centrar
-  parts.push([0x1f,0x11,0x02,0x04]);  // específico Phomemo (densidad)
   let y=0;
   while(y<H){
     const n=Math.min(255,H-y);
@@ -318,10 +318,11 @@ function onDisc(){writeChar=null;$("dot").classList.remove("on");$("conn").textC
 
 // ---- imprimir ----
 $("print").onclick=async()=>{
-  if(!writeChar) return;
+  if(!writeChar || printing) return;   // ignora toques repetidos mientras imprime
   const p=pack();
   if(!p){setStatus("Elige una imagen primero.","err");return;}
   try{
+    printing=true;
     $("print").disabled=true;
     const stream=buildStream(p.out,p.H);
     // Escritura CON respuesta si el equipo la permite: garantiza orden y que
@@ -338,7 +339,7 @@ $("print").onclick=async()=>{
     }
     setStatus("¡Listo! Impreso.","ok");
   }catch(err){ setStatus("Error al imprimir: "+(err.message||err.name||err),"err"); }
-  finally{ $("print").disabled=false; }
+  finally{ printing=false; $("print").disabled=false; }
 };
 
 render();
