@@ -148,7 +148,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v9</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v10</b>
   </div>
 </main>
 
@@ -341,19 +341,21 @@ $("print").onclick=async()=>{
   try{
     printing=true; abort=false;
     $("print").disabled=true; $("stop").style.display="block";
-    // Escritura CON respuesta si el equipo la permite: cada trozo se confirma
-    // (ACK) por el equipo, así garantizamos orden y no perder bytes por BLE.
-    const reliable = writeChar.properties.write;
-    const CHUNK=100;
+    // El M02 anuncia "escritura con respuesta" pero muchas unidades NO
+    // responden, y writeValue se queda esperando el ACK para siempre (por eso
+    // nunca llegaba a "Listo" y parecía imprimir sin fin). Preferimos SIN
+    // respuesta: rápido y sin esperar confirmación, que es lo que espera.
+    const useNR = writeChar.properties.writeWithoutResponse;
+    const CHUNK=120;
     // Margen para que la copia termine de imprimirse físicamente (avance del
     // papel) antes de mandar la siguiente, y no se encabalguen.
     const settle=Math.min(5000, 400 + p.H*5);
     for(let c=1;c<=copies && !abort;c++){
       for(let i=0;i<stream.length && !abort;i+=CHUNK){
         const part=stream.subarray(i,i+CHUNK);
-        if(reliable) await writeChar.writeValue(part);
-        else         await writeChar.writeValueWithoutResponse(part);
-        if(!reliable) await new Promise(r=>setTimeout(r,24));
+        if(useNR) await writeChar.writeValueWithoutResponse(part);
+        else      await writeChar.writeValue(part);
+        await new Promise(r=>setTimeout(r, useNR?10:0));
         const pct=Math.min(100,Math.round((i+CHUNK)/stream.length*100));
         setStatus(`Copia ${c}/${copies} · ${p.H} líneas · ${kb} KB — ${pct}%`);
       }
@@ -371,7 +373,13 @@ $("print").onclick=async()=>{
 $("stop").onclick=async()=>{
   abort=true;
   setStatus("Deteniendo…","err");
-  try{ if(writeChar) await writeChar.writeValue(new Uint8Array([0x1b,0x40])); }catch(e){}
+  try{
+    if(writeChar){
+      const cmd=new Uint8Array([0x1b,0x40]);
+      if(writeChar.properties.writeWithoutResponse) await writeChar.writeValueWithoutResponse(cmd);
+      else await writeChar.writeValue(cmd);
+    }
+  }catch(e){}
 };
 
 render();
