@@ -128,6 +128,11 @@ la M02 🖨️</textarea>
     <input type="range" id="th" min="40" max="220" value="128">
   </div>
 
+  <div class="ctrl">
+    <label>Copias <span id="copiesVal">1</span></label>
+    <input type="range" id="copies" min="1" max="10" value="1">
+  </div>
+
   <div class="preview-wrap">
     <div class="preview-cap">Vista previa (tamaño real de impresión)</div>
     <canvas id="preview" width="384" height="200"></canvas>
@@ -175,6 +180,7 @@ $("proc").onclick=e=>{const b=e.target.closest("button"); if(!b)return;
   proc=b.dataset.p; [...$("proc").children].forEach(x=>x.classList.toggle("active",x===b)); render();};
 $("fs").oninput=()=>{$("fsVal").textContent=$("fs").value+" px"; render();};
 $("th").oninput=()=>{$("thVal").textContent=$("th").value; render();};
+$("copies").oninput=()=>{$("copiesVal").textContent=$("copies").value;};
 $("text").oninput=render;
 $("file").onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
@@ -321,23 +327,31 @@ $("print").onclick=async()=>{
   if(!writeChar || printing) return;   // ignora toques repetidos mientras imprime
   const p=pack();
   if(!p){setStatus("Elige una imagen primero.","err");return;}
+  const copies=Math.max(1,Math.min(10, parseInt($("copies").value,10)||1));
   try{
     printing=true;
     $("print").disabled=true;
     const stream=buildStream(p.out,p.H);
-    // Escritura CON respuesta si el equipo la permite: garantiza orden y que
-    // no se pierdan bytes por BLE. Si se corrompe la cabecera GS v 0, el M02
-    // cree que faltan líneas y alimenta papel sin parar. Trozos pequeños.
+    // Escritura CON respuesta si el equipo la permite: cada trozo se confirma
+    // (ACK) por el equipo, así garantizamos orden y no perder bytes por BLE.
     const reliable = writeChar.properties.write;
     const CHUNK=100;
-    for(let i=0;i<stream.length;i+=CHUNK){
-      const part=stream.subarray(i,i+CHUNK);
-      if(reliable) await writeChar.writeValue(part);
-      else         await writeChar.writeValueWithoutResponse(part);
-      if(!reliable) await new Promise(r=>setTimeout(r,24));
-      setStatus(`Enviando… ${Math.min(100,Math.round(i/stream.length*100))}%`);
+    // Margen para que la copia termine de imprimirse físicamente (avance del
+    // papel) antes de mandar la siguiente, y no se encabalguen.
+    const settle=Math.min(5000, 400 + p.H*5);
+    for(let c=1;c<=copies;c++){
+      for(let i=0;i<stream.length;i+=CHUNK){
+        const part=stream.subarray(i,i+CHUNK);
+        if(reliable) await writeChar.writeValue(part);
+        else         await writeChar.writeValueWithoutResponse(part);
+        if(!reliable) await new Promise(r=>setTimeout(r,24));
+        const pct=Math.min(100,Math.round((i+CHUNK)/stream.length*100));
+        setStatus(`Copia ${c}/${copies} — enviando… ${pct}%`);
+      }
+      setStatus(`Copia ${c}/${copies} impresa.`,"ok");
+      if(c<copies) await new Promise(r=>setTimeout(r,settle));
     }
-    setStatus("¡Listo! Impreso.","ok");
+    setStatus(`¡Listo! ${copies} copia${copies>1?"s":""} impresa${copies>1?"s":""}.`,"ok");
   }catch(err){ setStatus("Error al imprimir: "+(err.message||err.name||err),"err"); }
   finally{ printing=false; $("print").disabled=false; }
 };
