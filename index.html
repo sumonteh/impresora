@@ -145,7 +145,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy.
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v7</b>
   </div>
 </main>
 
@@ -275,6 +275,7 @@ function buildStream(packed,H){
   }
   parts.push([0x1b,0x64,0x03]);       // avanza 3 líneas para el corte
   parts.push([0x1b,0x64,0x03]);
+  parts.push([0x1b,0x40]);            // ESC @  reset final: limpia estado residual
   let len=0; parts.forEach(p=>len+=p.length);
   const buf=new Uint8Array(len); let o=0;
   parts.forEach(p=>{buf.set(p,o); o+=p.length;});
