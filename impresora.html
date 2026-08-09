@@ -324,13 +324,16 @@ $("print").onclick=async()=>{
   try{
     $("print").disabled=true;
     const stream=buildStream(p.out,p.H);
-    const useNR = writeChar.properties.writeWithoutResponse;
-    const CHUNK=128;
+    // Escritura CON respuesta si el equipo la permite: garantiza orden y que
+    // no se pierdan bytes por BLE. Si se corrompe la cabecera GS v 0, el M02
+    // cree que faltan líneas y alimenta papel sin parar. Trozos pequeños.
+    const reliable = writeChar.properties.write;
+    const CHUNK=100;
     for(let i=0;i<stream.length;i+=CHUNK){
       const part=stream.subarray(i,i+CHUNK);
-      if(useNR) await writeChar.writeValueWithoutResponse(part);
-      else       await writeChar.writeValue(part);
-      await new Promise(r=>setTimeout(r,18));
+      if(reliable) await writeChar.writeValue(part);
+      else         await writeChar.writeValueWithoutResponse(part);
+      if(!reliable) await new Promise(r=>setTimeout(r,24));
       setStatus(`Enviando… ${Math.min(100,Math.round(i/stream.length*100))}%`);
     }
     setStatus("¡Listo! Impreso.","ok");
