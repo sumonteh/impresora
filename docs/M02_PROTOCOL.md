@@ -121,6 +121,8 @@ Diagnostic v27 showed `FF80 / FF82` accepts BLE writes but does not print raster
 
 Diagnostic v28 still produced 7 physical copies from 7 BLE write calls. Diagnostic v29 uses one large GATT write for the whole single-band raster and removes the final `ESC d 04` feed, testing whether the physical repetition maps to application-level write calls rather than bytes or raster bands.
 
+Diagnostic v29 confirmed the one-GATT-write approach prints one physical copy per tap. Diagnostic v30 keeps that transport behavior and adds blank raster rows at the bottom of the test image to create visible spacing between repeated manual tests without using a separate feed command.
+
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
 ## Abort behavior

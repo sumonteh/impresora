@@ -198,13 +198,13 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v29-one-gatt-write</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v30-bottom-gap</b>
   </div>
 </main>
 
 <script>
 const WIDTH=384, RB=48;               // 384 puntos = 48 bytes por línea
-const APP_VERSION="v29-one-gatt-write";
+const APP_VERSION="v30-bottom-gap";
 const M02_SERVICE="0000ff00-0000-1000-8000-00805f9b34fb";
 const M02_WRITE="0000ff02-0000-1000-8000-00805f9b34fb";
 const M02_OPTIONAL_SERVICES=[
@@ -215,10 +215,12 @@ const M02_OPTIONAL_SERVICES=[
 ];
 const CHUNK_SIZE=4096;                // prueba actual: una sola llamada GATT por raster corto
 const CHUNK_DELAY_MS=120;             // solo aplica si el navegador obliga a fragmentar
-const RASTER_BAND_LINES=24;           // bloques chicos: evita reimpresión del búfer M02
+const RASTER_BAND_LINES=48;           // una sola banda corta, enviada en una llamada GATT
 const CREDIT_TIMEOUT_MS=6000;         // si FF03 no autoriza más datos, se detiene
 const MAX_SAFE_PRINT_LINES=120;       // limite temporal: 5 bandas, evita gastar rollo
-const MAX_TEST_RASTER_LINES=24;       // prueba actual: nunca pasa a una segunda banda
+const MAX_TEST_RASTER_LINES=48;       // mantiene el test dentro de una sola banda/GATT write
+const TEST_BOTTOM_GAP_LINES=10;       // margen blanco entre impresiones manuales seguidas
+const MAX_TEST_CONTENT_LINES=MAX_TEST_RASTER_LINES-TEST_BOTTOM_GAP_LINES;
 const MAX_NATIVE_TEXT_BYTES=120;      // test nativo: una escritura corta para evitar repeticiones
 const ALLOW_MAIN_PRINT=false;         // bloqueado hasta resolver las 7 copias fisicas
 const $=id=>document.getElementById(id);
@@ -345,6 +347,14 @@ function trimRasterVertical(p,padLines=2){
   const H=end-start+1, out=new Uint8Array(RB*H);
   out.set(p.out.subarray(start*RB,(end+1)*RB));
   logDiag(`TEXT CROP: ${p.H} lines -> ${H} lines`);
+  return {out,H};
+}
+
+function appendBlankRasterLines(p,lines){
+  if(!Number.isFinite(lines) || lines<=0) return p;
+  const H=p.H+lines, out=new Uint8Array(RB*H);
+  out.set(p.out);
+  logDiag(`BOTTOM GAP: +${lines} blank lines`);
   return {out,H};
 }
 
@@ -701,6 +711,8 @@ $("testM02").onclick=async()=>{
   if(!p) return;
   logDiag(`SINGLE BAND RASTER TEST: ${($("text").value||"").length} chars`);
   p=trimRasterVertical(p);
+  p=limitRasterLines(p,MAX_TEST_CONTENT_LINES);
+  p=appendBlankRasterLines(p,TEST_BOTTOM_GAP_LINES);
   p=limitRasterLines(p,MAX_TEST_RASTER_LINES);
   await sendOneJob("TEST RASTER 1 BANDA",p);
 };
