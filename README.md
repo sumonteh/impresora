@@ -12,14 +12,17 @@ Soporte experimental para imprimir directo en una Phomemo M02 desde una pagina w
 6. Espera a que el panel diga `END JOB`.
 7. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
 
-En la version `v19-band-credits`, la impresion normal esta bloqueada para proteger el rollo. El log deberia mostrar:
+En la version `v20-ready-refill`, la impresion normal esta bloqueada para proteger el rollo. El log deberia mostrar:
 
 - `WRITE MODE: withoutResponse preferred for Bluefy/M02`;
 - `FLOW CONTROL: FF03 credit gating enabled`;
 - `FLOW CREDIT +... from FF03`;
 - writes `withoutResponse` de hasta 180 bytes;
 - test de 2 bandas de 24 lineas;
-- `SEGMENT 1/2` y, si la impresora entrega mas creditos, `SEGMENT 2/2`;
+- `SEGMENT 1/2`;
+- `PRINTER READY from FF01 1A0F0C`;
+- `FLOW CREDIT +7 from FF01 1A0F0C ready-refill`;
+- `SEGMENT 2/2`;
 - ningun `BLE write` despues de `END JOB`.
 
 ## Diagnostico M02

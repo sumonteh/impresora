@@ -184,7 +184,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v19-band-credits</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v20-ready-refill</b>
   </div>
 </main>
 
@@ -212,6 +212,7 @@ let taps=0, jobSeq=0;
 let servicesSeen=[], charsSeen=[], diagLog=[];
 let currentJob=null;
 let flowCredits=0, flowWaiters=[];
+let lastCreditGrant=0;
 
 const setStatus=(m,c="")=>{$("status").textContent=m;$("status").className="status "+c;};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -258,10 +259,18 @@ function setCanPrint(enabled){
 
 function addFlowCredits(n, source){
   if(!Number.isFinite(n) || n<=0) return;
+  if(source==="FF03") lastCreditGrant=n;
   flowCredits+=n;
   logDiag(`FLOW CREDIT +${n} from ${source}; available=${flowCredits}`);
   while(flowCredits>0 && flowWaiters.length) flowWaiters.shift()();
   updateDiag();
+}
+
+function onPrinterReady(source){
+  logDiag(`PRINTER READY from ${source}`);
+  if(printState==="sending" && flowCredits===0 && flowWaiters.length && lastCreditGrant>0){
+    addFlowCredits(lastCreditGrant,`${source} ready-refill`);
+  }
 }
 
 async function waitForFlowCredit(){
@@ -463,7 +472,7 @@ $("connect").onclick=async()=>{
     const server=await device.gatt.connect();
     const services=await server.getPrimaryServices();
     servicesSeen=[]; charsSeen=[]; writeChar=null;
-    flowCredits=0; flowWaiters=[];
+    flowCredits=0; flowWaiters=[]; lastCreditGrant=0;
     for(const s of services){
       servicesSeen.push(s.uuid);
       const chars=await s.getCharacteristics();
@@ -507,6 +516,7 @@ async function setupNotify(c){
       const su=shortUuid(c.uuid);
       logDiag(`NOTIFY ${su}: ${hex(bytes)}`);
       if(su==="FF03" && bytes[0]===0x01) addFlowCredits(bytes[1]||0,"FF03");
+      if(su==="FF01" && bytes[0]===0x1a && bytes[1]===0x0f && bytes[2]===0x0c) onPrinterReady("FF01 1A0F0C");
     });
     await c.startNotifications();
     logDiag(`NOTIFY ENABLED: ${shortUuid(c.uuid)}`);

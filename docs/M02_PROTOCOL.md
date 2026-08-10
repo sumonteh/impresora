@@ -104,6 +104,8 @@ Diagnostic v17 confirmed only the initial `+7` credits arrived. With 48-byte pac
 
 Diagnostic v18 completed the 1169-byte micro test in 7 writes using the initial `+7` credits. Diagnostic v19 sends a two-band test and never lets one credit window cross into the next raster band. If no new `FF03` credits arrive after the first complete band, it stops before sending band 2.
 
+Diagnostic v19 showed no new `FF03` credit frame after band 1, but `FF01` repeatedly sent `1A 0F 0C` after the first band. Diagnostic v20 treats that frame as "printer ready / band complete" and refills one last known credit window (`+7`) only while the app is actively waiting for the next segment.
+
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
 ## Abort behavior
