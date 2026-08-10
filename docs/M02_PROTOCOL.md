@@ -110,6 +110,8 @@ Diagnostic v20 completed two 24-line bands: the second band started only after `
 
 Diagnostic v22 changes the dedicated test button to print only the textarea content using the current font size and alignment. It does not add boxes, bars, labels, or any other test artwork. The text-only test still uses the same 24-line segments, BLE credit gate, and 120-line safety cap as normal safe printing.
 
+Diagnostic v23 trims fully blank raster rows above and below the text-only test before sending. This keeps the test focused on visible text and avoids spending paper on empty vertical padding.
+
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
 ## Abort behavior

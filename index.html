@@ -184,7 +184,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v22-text-only-test</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v23-tight-text-test</b>
   </div>
 </main>
 
@@ -263,6 +263,23 @@ function limitRasterLines(p,maxLines){
   logDiag(`SAFETY CROP: ${p.H} lines -> ${maxLines} lines`);
   setStatus(`Recortado temporalmente a ${maxLines} líneas para proteger el rollo.`,"err");
   return {out:p.out.subarray(0,RB*maxLines),H:maxLines};
+}
+
+function trimRasterVertical(p,padLines=2){
+  const blankRow=y=>{
+    for(let x=0;x<RB;x++) if(p.out[y*RB+x]) return false;
+    return true;
+  };
+  let top=0, bottom=p.H-1;
+  while(top<p.H && blankRow(top)) top++;
+  while(bottom>=top && blankRow(bottom)) bottom--;
+  if(top>bottom) return {out:new Uint8Array(RB),H:1};
+  const start=Math.max(0,top-padLines), end=Math.min(p.H-1,bottom+padLines);
+  if(start===0 && end===p.H-1) return p;
+  const H=end-start+1, out=new Uint8Array(RB*H);
+  out.set(p.out.subarray(start*RB,(end+1)*RB));
+  logDiag(`TEXT CROP: ${p.H} lines -> ${H} lines`);
+  return {out,H};
 }
 
 function addFlowCredits(n, source){
@@ -576,6 +593,7 @@ $("testM02").onclick=async()=>{
   let p=createTextOnlyTestRaster();
   if(!p) return;
   logDiag(`TEXT TEST: ${($("text").value||"").length} chars`);
+  p=trimRasterVertical(p);
   p=limitRasterLines(p,MAX_SAFE_PRINT_LINES);
   await sendOneJob("TEST TEXTO",p);
 };

@@ -13,7 +13,7 @@ Soporte experimental para imprimir directo en una Phomemo M02 desde una pagina w
 7. Espera a que el panel diga `END JOB`.
 8. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
 
-En la version `v22-text-only-test`, el test seguro imprime solo el texto escrito en el cuadro, sin marcos, barras ni contenido extra. La impresion normal sigue disponible, pero limitada temporalmente a 120 lineas para proteger el rollo.
+En la version `v23-tight-text-test`, el test seguro imprime solo el texto escrito en el cuadro, sin marcos, barras ni contenido extra. Tambien recorta filas blancas arriba y abajo del texto para no gastar papel vacio. La impresion normal sigue disponible, pero limitada temporalmente a 120 lineas para proteger el rollo.
 
 El log del test seguro deberia mostrar:
 
@@ -22,6 +22,7 @@ El log del test seguro deberia mostrar:
 - `FLOW CREDIT +... from FF03`;
 - writes `withoutResponse` de hasta 180 bytes;
 - `TEXT TEST: ... chars`;
+- `TEXT CROP: ... lines -> ... lines`, si habia margen blanco;
 - segmentos de hasta 24 lineas;
 - `SEGMENT .../...`;
 - `PRINTER READY from FF01 1A0F0C`;
