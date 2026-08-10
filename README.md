@@ -13,11 +13,12 @@ Soporte experimental para imprimir directo en una Phomemo M02 desde una pagina w
 7. Espera a que el panel diga `END JOB`.
 8. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
 
-En la version `v24-native-text-probe`, la impresion normal queda bloqueada otra vez porque la M02 imprimio 7 copias fisicas aunque la pagina envio un solo trabajo. El test seguro ahora manda texto nativo en un paquete corto, sin raster, sin bandas y sin reutilizar el valor `7` como permiso para seguir enviando.
+En la version `v25-diagnostic-version`, la impresion normal queda bloqueada otra vez porque la M02 imprimio 7 copias fisicas aunque la pagina envio un solo trabajo. El test seguro manda texto nativo en un paquete corto, sin raster, sin bandas y sin reutilizar el valor `7` como permiso para seguir enviando. El diagnostico copiado incluye la version exacta de la pagina cargada.
 
 El log del test seguro deberia mostrar:
 
 - `WRITE MODE: withoutResponse preferred for Bluefy/M02`;
+- `APP VERSION: v25-diagnostic-version`;
 - `NATIVE TEXT TEST: ... chars / ... bytes`;
 - `BLE raw write 1/1`, si el texto cabe en una escritura;
 - ningun `BLE write` despues de `END JOB`.

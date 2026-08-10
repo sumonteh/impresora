@@ -184,12 +184,13 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v24-native-text-probe</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v25-diagnostic-version</b>
   </div>
 </main>
 
 <script>
 const WIDTH=384, RB=48;               // 384 puntos = 48 bytes por línea
+const APP_VERSION="v25-diagnostic-version";
 const M02_SERVICE="0000ff00-0000-1000-8000-00805f9b34fb";
 const M02_WRITE="0000ff02-0000-1000-8000-00805f9b34fb";
 const M02_OPTIONAL_SERVICES=[
@@ -532,6 +533,7 @@ $("connect").onclick=async()=>{
   try{
     setStatus("Elige tu impresora (M02 o número de serie Qxxx)…");
     logDiag("CONNECT CLICK");
+    logDiag(`APP VERSION: ${APP_VERSION}`);
     device=await navigator.bluetooth.requestDevice({
       acceptAllDevices:true,
       optionalServices:M02_OPTIONAL_SERVICES
@@ -737,6 +739,7 @@ $("stop").onclick=async()=>{
 
 $("copyDiag").onclick=async()=>{
   const txt=[
+    `App: ${APP_VERSION}`,
     `BLE: ${$("diagBle").textContent}`,
     `Device: ${$("diagDevice").textContent}`,
     `Job: ${$("diagJob").textContent}`,

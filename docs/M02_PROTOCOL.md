@@ -111,7 +111,7 @@ Diagnostic v22 changes the dedicated test button to print only the textarea cont
 
 Diagnostic v23 trims fully blank raster rows above and below the text-only test before sending. This keeps the test focused on visible text and avoids spending paper on empty vertical padding.
 
-The real printer still produced 7 physical copies after the v23 text-only raster test, even though the browser log showed one job and no writes after `END JOB`. Diagnostic v24 blocks normal raster printing again and changes the test button to a short native ESC/POS text probe. It sends no `GS v 0` raster bands and does not use the `FF03: 01 07` value as a send-window refill.
+The real printer still produced 7 physical copies after the v23 text-only raster test, even though the browser log showed one job and no writes after `END JOB`. Diagnostic v24 blocks normal raster printing again and changes the test button to a short native ESC/POS text probe. It sends no `GS v 0` raster bands and does not use the `FF03: 01 07` value as a send-window refill. Diagnostic v25 adds the loaded app version to the copied diagnostic report and connection log to catch stale browser pages.
 
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
