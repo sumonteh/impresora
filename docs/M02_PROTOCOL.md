@@ -9,7 +9,7 @@ Current flow after this diagnostic iteration:
 1. User taps `Conectar impresora`.
 2. Web Bluetooth requests a device with M02-compatible optional services.
 3. The app connects to GATT, lists every service and characteristic, and selects the write characteristic.
-4. User taps `TEST — RASTER 1 VEZ`.
+4. User taps `TEST — 1 ENVÍO`.
 5. The app locks the print state from `idle` to `preparing`.
 6. Diagnostic v26 rasterizes the textarea content, trims blank vertical rows, and caps it to one 24-line raster band.
 7. The payload should fit in the initial credit window and should not wait for a second ready-refill.
@@ -118,6 +118,8 @@ Diagnostic v25 confirmed native text writes are accepted by BLE but do not print
 Diagnostic v27 keeps the single-band raster test and exposes a write-channel selector. The printer advertises several writable characteristics (`FF02`, transparent UART, `FEC7`, and `FF82`). Testing the same payload across channels should show whether repeated physical output is tied to the `FF00 / FF02` path.
 
 Diagnostic v27 showed `FF80 / FF82` accepts BLE writes but does not print raster data on this printer. Diagnostic v28 returns to `FF00 / FF02`, but uses BLE writes with response and a slower 120 ms inter-packet delay for the single-band raster probe.
+
+Diagnostic v28 still produced 7 physical copies from 7 BLE write calls. Diagnostic v29 uses one large GATT write for the whole single-band raster and removes the final `ESC d 04` feed, testing whether the physical repetition maps to application-level write calls rather than bytes or raster bands.
 
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
