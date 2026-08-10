@@ -90,6 +90,16 @@ Reason for the raster-band change: the first diagnostic capture showed one tap, 
 
 Reason for keeping `withoutResponse`: the second diagnostic capture showed `withResponse` was not usable in Bluefy for this device. The next test keeps safe raster bands but returns to the fast write method.
 
+Diagnostic v16 completed the whole job with `withoutResponse` and no JS resend, then the printer continued physically after `END JOB`. The important notification is:
+
+```text
+NOTIFY FF03: 01 07
+```
+
+Current interpretation: `FF03` is likely credit-based flow control. Sending 93 packets without consuming credits can overflow the device-side buffer and leave the firmware printing from its own queue, which the browser cannot abort after the fact.
+
+Diagnostic v17 gates every BLE write behind `FF03` credits. If no new credit arrives, the app stops with a timeout instead of dumping the full raster into the printer. The regular print button is temporarily blocked; only the micro test is enabled until the flow-control behavior is confirmed.
+
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
 ## Abort behavior
@@ -104,6 +114,7 @@ Reason: no source reviewed here confirms `ESC @` as a real cancel/reset-safe abo
 - `vivier/phomemo-tools/tools/phomemo-filter.py`: M02 raster packing/header/footer behavior. Reviewed for protocol only; code was not copied.
 - `sgrankin/phomemo/PROTOCOL.md`: M02-family BLE UUIDs, write mode notes, raster format, and M02X caveats.
 - Qiita article "Phomemo で 感熱紙に Hello World !": BLE characteristic listing for `ff01`, `ff02`, and `ff03`.
+- `print_master_ble`: MIT-licensed Flutter package documentation describing `FF03` as credit-based flow control for Zhuhai Quin printers. Used as protocol evidence, not copied as code.
 
 ## Current uncertainty
 
@@ -115,3 +126,4 @@ We still need a real diagnostic copy from the physical M02 in Bluefy:
 - Exact count of BLE writes and bytes sent.
 - Whether repeated physical printing happens after `END JOB`.
 - Whether the printer sends notifications/status frames during or after the job.
+- Whether `FF03` keeps sending credit frames while the printer drains data.
