@@ -158,6 +158,14 @@ la M02 🖨️</textarea>
       <option>Conecta la impresora primero</option>
     </select>
   </div>
+  <div class="ctrl">
+    <label>Modo de envío</label>
+    <select id="writeMode" disabled>
+      <option value="withResponse">Con respuesta BLE</option>
+      <option value="withoutResponse">Sin respuesta BLE</option>
+      <option value="auto">Automático</option>
+    </select>
+  </div>
   <button id="print" class="act print" disabled>▐ Imprimir seguro — máx. 120 líneas</button>
   <button id="testM02" class="act print" disabled>TEST — RASTER 1 VEZ</button>
   <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
@@ -190,13 +198,13 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v27-write-channel-probe</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v28-with-response-probe</b>
   </div>
 </main>
 
 <script>
 const WIDTH=384, RB=48;               // 384 puntos = 48 bytes por línea
-const APP_VERSION="v27-write-channel-probe";
+const APP_VERSION="v28-with-response-probe";
 const M02_SERVICE="0000ff00-0000-1000-8000-00805f9b34fb";
 const M02_WRITE="0000ff02-0000-1000-8000-00805f9b34fb";
 const M02_OPTIONAL_SERVICES=[
@@ -206,7 +214,7 @@ const M02_OPTIONAL_SERVICES=[
   "49535343-fe7d-4ae5-8fa9-9fafd205e455"
 ];
 const CHUNK_SIZE=180;                 // un crédito FF03 parece autorizar un paquete BLE, no una línea
-const CHUNK_DELAY_MS=30;              // ritmo conservador de la app original
+const CHUNK_DELAY_MS=120;             // prueba lenta: evita saturar el búfer físico
 const RASTER_BAND_LINES=24;           // bloques chicos: evita reimpresión del búfer M02
 const CREDIT_TIMEOUT_MS=6000;         // si FF03 no autoriza más datos, se detiene
 const MAX_SAFE_PRINT_LINES=120;       // limite temporal: 5 bandas, evita gastar rollo
@@ -267,6 +275,7 @@ function setCanPrint(enabled){
   $("print").disabled=!enabled || !ALLOW_MAIN_PRINT;
   $("testM02").disabled=!enabled;
   $("writeChannel").disabled=!enabled || writeCandidates.length<2;
+  $("writeMode").disabled=!enabled;
 }
 
 function writeChannelLabel(item){
@@ -299,6 +308,20 @@ function populateWriteChannels(){
   }
   const ff02=writeCandidates.find(x=>x.charShort==="FF02");
   selectWriteChannel((ff02||writeCandidates[0]).key);
+}
+
+function selectedWriteModeLabel(){
+  const mode=$("writeMode").value;
+  if(mode==="withResponse") return "withResponse";
+  if(mode==="withoutResponse") return "withoutResponse";
+  return "auto";
+}
+
+function shouldWriteWithoutResponse(){
+  const mode=$("writeMode").value;
+  if(mode==="withoutResponse") return !!writeChar.properties.writeWithoutResponse;
+  if(mode==="withResponse") return !writeChar.properties.write && !!writeChar.properties.writeWithoutResponse;
+  return !!writeChar.properties.writeWithoutResponse;
 }
 
 function limitRasterLines(p,maxLines){
@@ -393,6 +416,7 @@ $("th").oninput=()=>{$("thVal").textContent=$("th").value; render();};
 $("copies").oninput=()=>{$("copiesVal").textContent="1";};
 $("text").oninput=render;
 $("writeChannel").onchange=()=>selectWriteChannel($("writeChannel").value);
+$("writeMode").onchange=()=>logDiag(`WRITE MODE SELECTED: ${selectedWriteModeLabel()}`);
 $("file").onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
   const im=new Image(); im.onload=()=>{img=im; render();}; im.src=URL.createObjectURL(f);
@@ -626,7 +650,7 @@ $("connect").onclick=async()=>{
     setCanPrint(printState==="idle");
     $("stop").style.display="block";   // Detener siempre disponible tras conectar
     logDiag(`WRITE CHARACTERISTIC: ${writeChar.uuid} props=${propsOf(writeChar)}`);
-    logDiag("WRITE MODE: withoutResponse preferred for Bluefy/M02");
+    logDiag(`WRITE MODE SELECTED: ${selectedWriteModeLabel()}`);
     logDiag("FLOW CONTROL: FF03 credit gating enabled");
     setStatus("Conectada. Lista para imprimir.","ok");
     updateDiag();
@@ -637,7 +661,7 @@ $("connect").onclick=async()=>{
   }
 };
 function onDisc(){writeChar=null;$("dot").classList.remove("on");$("conn").textContent="Sin conectar";
-  setCanPrint(false); $("writeChannel").disabled=true; logDiag("GATT DISCONNECTED"); updateDiag(); setStatus("Se desconectó la impresora.","err");}
+  setCanPrint(false); $("writeChannel").disabled=true; $("writeMode").disabled=true; logDiag("GATT DISCONNECTED"); updateDiag(); setStatus("Se desconectó la impresora.","err");}
 
 async function setupNotify(c){
   try{
@@ -694,7 +718,7 @@ async function sendRawJob(label,payload){
     logDiag(`Payload HEX: ${hex(payload)}`);
     setPrintState("sending");
     currentJob.startedAt=performance.now();
-    const useWithoutResponse=writeChar.properties.writeWithoutResponse;
+    const useWithoutResponse=shouldWriteWithoutResponse();
     const total=Math.ceil(payload.length/CHUNK_SIZE);
     for(let i=0,idx=1;i<payload.length;i+=CHUNK_SIZE,idx++){
       if(abortRequested) throw new Error("Abortado por el usuario");
@@ -745,7 +769,7 @@ async function sendOneJob(label,p){
     setPrintState("sending");
     currentJob.startedAt=performance.now();
     const total=segments.reduce((sum,s)=>sum+Math.ceil(s.bytes.length/CHUNK_SIZE),0);
-    const useWithoutResponse=writeChar.properties.writeWithoutResponse;
+    const useWithoutResponse=shouldWriteWithoutResponse();
     let idx=1;
     for(let s=0;s<segments.length;s++){
       const segment=segments[s];
@@ -804,6 +828,7 @@ $("copyDiag").onclick=async()=>{
     `BLE: ${$("diagBle").textContent}`,
     `Device: ${$("diagDevice").textContent}`,
     `Write channel: ${currentWriteChannelLabel()}`,
+    `Write mode: ${selectedWriteModeLabel()}`,
     `Job: ${$("diagJob").textContent}`,
     `Taps: ${$("diagTaps").textContent}`,
     `Writes: ${$("diagWrites").textContent}`,
