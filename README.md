@@ -9,31 +9,20 @@ Soporte experimental para imprimir directo en una Phomemo M02 desde una pagina w
 3. Toca `Conectar impresora`.
 4. Elige la M02 en la lista Bluetooth.
 5. Escribe exactamente el texto que quieres probar.
-6. Para prueba segura, toca `TEST — SOLO TEXTO` una sola vez.
+6. Para prueba segura, toca `TEST — TEXTO 1 VEZ` una sola vez.
 7. Espera a que el panel diga `END JOB`.
 8. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
 
-En la version `v23-tight-text-test`, el test seguro imprime solo el texto escrito en el cuadro, sin marcos, barras ni contenido extra. Tambien recorta filas blancas arriba y abajo del texto para no gastar papel vacio. La impresion normal sigue disponible, pero limitada temporalmente a 120 lineas para proteger el rollo.
+En la version `v24-native-text-probe`, la impresion normal queda bloqueada otra vez porque la M02 imprimio 7 copias fisicas aunque la pagina envio un solo trabajo. El test seguro ahora manda texto nativo en un paquete corto, sin raster, sin bandas y sin reutilizar el valor `7` como permiso para seguir enviando.
 
 El log del test seguro deberia mostrar:
 
 - `WRITE MODE: withoutResponse preferred for Bluefy/M02`;
-- `FLOW CONTROL: FF03 credit gating enabled`;
-- `FLOW CREDIT +... from FF03`;
-- writes `withoutResponse` de hasta 180 bytes;
-- `TEXT TEST: ... chars`;
-- `TEXT CROP: ... lines -> ... lines`, si habia margen blanco;
-- segmentos de hasta 24 lineas;
-- `SEGMENT .../...`;
-- `PRINTER READY from FF01 1A0F0C`;
-- `FLOW CREDIT +7 from FF01 1A0F0C ready-refill`;
+- `NATIVE TEXT TEST: ... chars / ... bytes`;
+- `BLE raw write 1/1`, si el texto cabe en una escritura;
 - ningun `BLE write` despues de `END JOB`.
 
-El log de impresion normal puede mostrar:
-
-- `SAFETY CROP: ... lines -> 120 lines`, si el contenido era mas alto;
-- segmentos de 24 lineas;
-- recargas por `FF01 1A0F0C ready-refill`.
+La impresion normal queda bloqueada temporalmente hasta resolver la repeticion fisica de 7 copias.
 
 ## Diagnostico M02
 

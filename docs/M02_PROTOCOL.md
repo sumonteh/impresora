@@ -9,13 +9,12 @@ Current flow after this diagnostic iteration:
 1. User taps `Conectar impresora`.
 2. Web Bluetooth requests a device with M02-compatible optional services.
 3. The app connects to GATT, lists every service and characteristic, and selects the write characteristic.
-4. User taps `TEST — SOLO TEXTO` or the safe print button.
+4. User taps `TEST — TEXTO 1 VEZ`.
 5. The app locks the print state from `idle` to `preparing`.
-6. A 384 px wide monochrome raster is packed as 1 bpp, MSB first, with `1 = black`.
-7. A single byte stream is built.
-8. The stream is fragmented into BLE writes. Diagnostic v18 uses 180 byte chunks while testing `FF03` credits.
-9. Each write is sent once, with no retry of the full job.
-10. On completion or error, the state returns to `idle`.
+6. Diagnostic v24 builds a short native ESC/POS text payload, capped to 120 bytes.
+7. The payload is fragmented into BLE writes only if it exceeds the 180 byte chunk size.
+8. Each write is sent once, with no retry of the full job.
+9. On completion or error, the state returns to `idle`.
 
 ## BLE service and characteristics
 
@@ -111,6 +110,8 @@ Diagnostic v20 completed two 24-line bands: the second band started only after `
 Diagnostic v22 changes the dedicated test button to print only the textarea content using the current font size and alignment. It does not add boxes, bars, labels, or any other test artwork. The text-only test still uses the same 24-line segments, BLE credit gate, and 120-line safety cap as normal safe printing.
 
 Diagnostic v23 trims fully blank raster rows above and below the text-only test before sending. This keeps the test focused on visible text and avoids spending paper on empty vertical padding.
+
+The real printer still produced 7 physical copies after the v23 text-only raster test, even though the browser log showed one job and no writes after `END JOB`. Diagnostic v24 blocks normal raster printing again and changes the test button to a short native ESC/POS text probe. It sends no `GS v 0` raster bands and does not use the `FF03: 01 07` value as a send-window refill.
 
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
