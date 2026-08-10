@@ -125,7 +125,9 @@ Diagnostic v29 confirmed the one-GATT-write approach prints one physical copy pe
 
 Diagnostic v30 exposed a credit-accounting issue after repeated manual tests: seven successful single-write jobs consumed the initial `FF03: 01 07` credits, while later `FF01 1A 0F 0C` ready notifications did not refill the local counter. Diagnostic v31 treats each ready notification as permission for at least one next single-write job and increases the bottom raster gap.
 
-These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
+Diagnostic v31 was confirmed on the physical M02. Final v32 enables the main print button and adds a 1-5 copies selector. Each copy is still one short raster segment and one GATT write with response; multiple copies are queued as separate jobs and the app waits for the printer `READY`/credit signal before sending the next copy.
+
+These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness for longer untested formats; the app keeps a single-write height cap to avoid returning to the repeated-output failure mode.
 
 ## Abort behavior
 
@@ -141,14 +143,15 @@ Reason: no source reviewed here confirms `ESC @` as a real cancel/reset-safe abo
 - Qiita article "Phomemo で 感熱紙に Hello World !": BLE characteristic listing for `ff01`, `ff02`, and `ff03`.
 - `print_master_ble`: MIT-licensed Flutter package documentation describing `FF03` as credit-based flow control for Zhuhai Quin printers. Used as protocol evidence, not copied as code.
 
-## Current uncertainty
+## Current constraints
 
-We still need a real diagnostic copy from the physical M02 in Bluefy:
+The confirmed final path is intentionally short:
 
-- Actual services and characteristics exposed by the selected printer.
-- Whether `ff02` is selected.
-- Whether the write method used is `withoutResponse` or `withResponse`.
-- Exact count of BLE writes and bytes sent.
-- Whether repeated physical printing happens after `END JOB`.
-- Whether the printer sends notifications/status frames during or after the job.
-- Whether `FF03` keeps sending credit frames while the printer drains data.
+- write channel `FF00 / FF02`;
+- write mode `withResponse`;
+- one raster segment per copy;
+- one GATT write per copy;
+- next copy only after the printer ready/credit notification;
+- 1-5 copies per print run.
+
+The diagnostic panel still records BLE writes, bytes, selected copies, channel, mode, and notification frames so future printer behavior can be compared against the confirmed path.

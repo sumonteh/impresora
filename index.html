@@ -141,7 +141,7 @@ la M02 🖨️</textarea>
 
   <div class="ctrl">
     <label>Copias <span id="copiesVal">1</span></label>
-    <input type="range" id="copies" min="1" max="1" value="1" disabled>
+    <input type="range" id="copies" min="1" max="5" value="1">
   </div>
 
   <div class="preview-wrap">
@@ -166,8 +166,8 @@ la M02 🖨️</textarea>
       <option value="auto">Automático</option>
     </select>
   </div>
-  <button id="print" class="act print" disabled>▐ Imprimir seguro — máx. 120 líneas</button>
-  <button id="testM02" class="act print" disabled>TEST — 1 ENVÍO</button>
+  <button id="print" class="act print" disabled>▐ Imprimir</button>
+  <button id="testM02" class="act print" disabled>Prueba — 1 copia</button>
   <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
 
   <div id="status" class="status">Enciende la M02 (3 s) y tenla cerca.</div>
@@ -198,13 +198,13 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v31-ready-credit-gap</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v32-final-copies</b>
   </div>
 </main>
 
 <script>
 const WIDTH=384, RB=48;               // 384 puntos = 48 bytes por línea
-const APP_VERSION="v31-ready-credit-gap";
+const APP_VERSION="v32-final-copies";
 const M02_SERVICE="0000ff00-0000-1000-8000-00805f9b34fb";
 const M02_WRITE="0000ff02-0000-1000-8000-00805f9b34fb";
 const M02_OPTIONAL_SERVICES=[
@@ -217,18 +217,18 @@ const CHUNK_SIZE=4096;                // prueba actual: una sola llamada GATT po
 const CHUNK_DELAY_MS=120;             // solo aplica si el navegador obliga a fragmentar
 const RASTER_BAND_LINES=48;           // una sola banda corta, enviada en una llamada GATT
 const CREDIT_TIMEOUT_MS=6000;         // si FF03 no autoriza más datos, se detiene
-const MAX_SAFE_PRINT_LINES=120;       // limite temporal: 5 bandas, evita gastar rollo
-const MAX_TEST_RASTER_LINES=48;       // mantiene el test dentro de una sola banda/GATT write
-const TEST_BOTTOM_GAP_LINES=24;       // margen blanco entre impresiones manuales seguidas
-const MAX_TEST_CONTENT_LINES=MAX_TEST_RASTER_LINES-TEST_BOTTOM_GAP_LINES;
+const FINAL_BOTTOM_GAP_LINES=24;      // margen blanco entre copias sin usar feed separado
+const MAX_FINAL_RASTER_LINES=48;      // mantiene cada copia en una sola banda/GATT write
+const MAX_FINAL_CONTENT_LINES=MAX_FINAL_RASTER_LINES-FINAL_BOTTOM_GAP_LINES;
 const MAX_NATIVE_TEXT_BYTES=120;      // test nativo: una escritura corta para evitar repeticiones
-const ALLOW_MAIN_PRINT=false;         // bloqueado hasta resolver las 7 copias fisicas
+const MAX_COPIES=5;
 const $=id=>document.getElementById(id);
 const cv=$("preview"), ctx=cv.getContext("2d",{willReadFrequently:true});
 let mode="text", proc="threshold", align="center", img=null, writeChar=null, device=null;
 let writeCandidates=[], selectedWriteKey="";
 let printState="idle";
 let abortRequested=false;
+let stopRequested=false;
 let taps=0, jobSeq=0;
 let servicesSeen=[], charsSeen=[], diagLog=[];
 let currentJob=null;
@@ -274,10 +274,15 @@ function updateDiag(){
   $("dbg").textContent=`toques de Imprimir: ${taps} · estado: ${printState}`;
 }
 function setCanPrint(enabled){
-  $("print").disabled=!enabled || !ALLOW_MAIN_PRINT;
+  $("print").disabled=!enabled;
   $("testM02").disabled=!enabled;
   $("writeChannel").disabled=!enabled || writeCandidates.length<2;
   $("writeMode").disabled=!enabled;
+}
+
+function selectedCopies(){
+  const n=parseInt($("copies").value,10);
+  return Math.max(1,Math.min(MAX_COPIES,Number.isFinite(n)?n:1));
 }
 
 function writeChannelLabel(item){
@@ -429,7 +434,7 @@ $("proc").onclick=e=>{const b=e.target.closest("button"); if(!b)return;
   proc=b.dataset.p; [...$("proc").children].forEach(x=>x.classList.toggle("active",x===b)); render();};
 $("fs").oninput=()=>{$("fsVal").textContent=$("fs").value+" px"; render();};
 $("th").oninput=()=>{$("thVal").textContent=$("th").value; render();};
-$("copies").oninput=()=>{$("copiesVal").textContent="1";};
+$("copies").oninput=()=>{$("copiesVal").textContent=String(selectedCopies());};
 $("text").oninput=render;
 $("writeChannel").onchange=()=>selectWriteChannel($("writeChannel").value);
 $("writeMode").onchange=()=>logDiag(`WRITE MODE SELECTED: ${selectedWriteModeLabel()}`);
@@ -698,30 +703,39 @@ async function setupNotify(c){
 // ---- imprimir ----
 $("print").onclick=async()=>{
   taps++; logDiag(`PRINT CLICK #${taps}`); updateDiag();
-  if(!ALLOW_MAIN_PRINT){
-    logDiag("PRINT BLOCKED: modo diagnostico protege el rollo; usa TEST — 1 ENVÍO");
-    setStatus("Impresion normal bloqueada por seguridad. Usa TEST — 1 ENVÍO.","err");
-    return;
-  }
   if(!writeChar || printState!=="idle"){logDiag(`PRINT IGNORED state=${printState}`); return;}
-  let p=pack();
-  if(!p){setStatus("Elige una imagen primero.","err");return;}
-  p=limitRasterLines(p,MAX_SAFE_PRINT_LINES);
-  await sendOneJob("PRINT",p);
+  const copies=selectedCopies();
+  const p=prepareFinalRaster();
+  if(!p) return;
+  await sendCopies("IMPRESION",p,copies);
 };
 
 $("testM02").onclick=async()=>{
   taps++; logDiag(`SINGLE BAND RASTER TEST CLICK #${taps}`); updateDiag();
   if(!writeChar || printState!=="idle"){logDiag(`TEST IGNORED state=${printState}`); return;}
-  let p=createTextOnlyTestRaster();
+  const p=prepareFinalRaster();
   if(!p) return;
   logDiag(`SINGLE BAND RASTER TEST: ${($("text").value||"").length} chars`);
-  p=trimRasterVertical(p);
-  p=limitRasterLines(p,MAX_TEST_CONTENT_LINES);
-  p=appendBlankRasterLines(p,TEST_BOTTOM_GAP_LINES);
-  p=limitRasterLines(p,MAX_TEST_RASTER_LINES);
-  await sendOneJob("TEST RASTER 1 BANDA",p);
+  await sendCopies("PRUEBA",p,1);
 };
+
+function prepareFinalRaster(){
+  let p;
+  if(mode==="text"){
+    p=createTextOnlyTestRaster();
+  }else{
+    p=pack();
+    if(!p){
+      setStatus("Elige una imagen primero.","err");
+      return null;
+    }
+  }
+  p=trimRasterVertical(p);
+  p=limitRasterLines(p,MAX_FINAL_CONTENT_LINES);
+  p=appendBlankRasterLines(p,FINAL_BOTTOM_GAP_LINES);
+  p=limitRasterLines(p,MAX_FINAL_RASTER_LINES);
+  return p;
+}
 
 async function sendRawJob(label,payload){
   currentJob={id:++jobSeq,label,lines:0,payloadBytes:payload.length,writes:0,bytesSent:0,
@@ -769,11 +783,29 @@ async function sendRawJob(label,payload){
   }
 }
 
-async function sendOneJob(label,p){
+async function sendCopies(label,p,copies){
+  const totalCopies=Math.max(1,Math.min(MAX_COPIES,copies||1));
+  stopRequested=false;
+  setCanPrint(false);
+  logDiag(`COPY RUN: ${totalCopies} copia${totalCopies===1?"":"s"}`);
+  for(let copy=1;copy<=totalCopies;copy++){
+    if(!writeChar) break;
+    if(stopRequested) break;
+    const copyLabel=totalCopies===1 ? label : `${label} copia ${copy}/${totalCopies}`;
+    const ok=await sendOneJob(copyLabel,p,{keepControlsLocked:copy<totalCopies});
+    if(!ok) break;
+    if(!writeChar || stopRequested) break;
+  }
+  stopRequested=false;
+  setCanPrint(!!writeChar && printState==="idle");
+}
+
+async function sendOneJob(label,p,opts={}){
   const segments=buildSegments(p.out,p.H);
   const stream=concatParts(segments.map(s=>s.bytes));
   currentJob={id:++jobSeq,label,lines:p.H,payloadBytes:stream.length,writes:0,bytesSent:0,
     chunkSize:CHUNK_SIZE,delayMs:CHUNK_DELAY_MS,startedAt:0,finishedAt:0};
+  let ok=false;
   try{
     abortRequested=false;
     setPrintState("preparing");
@@ -811,8 +843,9 @@ async function sendOneJob(label,p){
     setPrintState("finishing");
     currentJob.finishedAt=performance.now();
     logDiag(`END JOB #${currentJob.id}`);
-    setStatus(`Listo: ${label} enviado una vez · ${p.H} líneas.`,"ok");
+    setStatus(`Listo: ${label} enviado · ${p.H} líneas.`,"ok");
     setPrintState("completed");
+    ok=true;
   }catch(err){
     currentJob.finishedAt=performance.now();
     setPrintState(abortRequested ? "completed" : "error");
@@ -822,14 +855,16 @@ async function sendOneJob(label,p){
   }finally{
     abortRequested=false;
     setPrintState("idle");
-    setCanPrint(!!writeChar);
+    if(!opts.keepControlsLocked) setCanPrint(!!writeChar);
     updateDiag();
   }
+  return ok;
 }
 
 // ---- detener envío ----
 $("stop").onclick=async()=>{
   abortRequested=true;
+  stopRequested=true;
   flowWaiters.splice(0).forEach(w=>w());
   logDiag("ABORT CLICK: se detendrá el loop local y se desconectará BLE");
   setStatus("Deteniendo y desconectando…","err");
@@ -847,6 +882,7 @@ $("copyDiag").onclick=async()=>{
     `Device: ${$("diagDevice").textContent}`,
     `Write channel: ${currentWriteChannelLabel()}`,
     `Write mode: ${selectedWriteModeLabel()}`,
+    `Copies: ${selectedCopies()}`,
     `Job: ${$("diagJob").textContent}`,
     `Taps: ${$("diagTaps").textContent}`,
     `Writes: ${$("diagWrites").textContent}`,
