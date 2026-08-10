@@ -115,6 +115,8 @@ The real printer still produced 7 physical copies after the v23 text-only raster
 
 Diagnostic v25 confirmed native text writes are accepted by BLE but do not print on the M02. Diagnostic v26 returns to raster mode, but restricts the test to a single raster band so the job never crosses into a second `GS v 0` block or a ready-refill window.
 
+Diagnostic v27 keeps the single-band raster test and exposes a write-channel selector. The printer advertises several writable characteristics (`FF02`, transparent UART, `FEC7`, and `FF82`). Testing the same payload across channels should show whether repeated physical output is tied to the `FF00 / FF02` path.
+
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
 ## Abort behavior

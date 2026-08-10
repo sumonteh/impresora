@@ -37,7 +37,7 @@
        font-size:12px;letter-spacing:.06em;text-transform:uppercase;background:transparent}
   .tab.active{background:var(--ink);color:var(--paper)}
 
-  textarea,input[type=file]{width:100%;font-family:var(--mono);font-size:13px;
+  textarea,input[type=file],select{width:100%;font-family:var(--mono);font-size:13px;
        background:var(--paper-hi);border:1px solid var(--rule);color:var(--ink);padding:10px}
   textarea{height:120px;resize:vertical}
   input[type=file]{padding:8px}
@@ -152,6 +152,12 @@ la M02 🖨️</textarea>
   </div>
 
   <button id="connect" class="act">⟐ Conectar impresora</button>
+  <div class="ctrl">
+    <label>Canal BLE</label>
+    <select id="writeChannel" disabled>
+      <option>Conecta la impresora primero</option>
+    </select>
+  </div>
   <button id="print" class="act print" disabled>▐ Imprimir seguro — máx. 120 líneas</button>
   <button id="testM02" class="act print" disabled>TEST — RASTER 1 VEZ</button>
   <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
@@ -184,13 +190,13 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v26-single-band-raster</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v27-write-channel-probe</b>
   </div>
 </main>
 
 <script>
 const WIDTH=384, RB=48;               // 384 puntos = 48 bytes por línea
-const APP_VERSION="v26-single-band-raster";
+const APP_VERSION="v27-write-channel-probe";
 const M02_SERVICE="0000ff00-0000-1000-8000-00805f9b34fb";
 const M02_WRITE="0000ff02-0000-1000-8000-00805f9b34fb";
 const M02_OPTIONAL_SERVICES=[
@@ -210,6 +216,7 @@ const ALLOW_MAIN_PRINT=false;         // bloqueado hasta resolver las 7 copias f
 const $=id=>document.getElementById(id);
 const cv=$("preview"), ctx=cv.getContext("2d",{willReadFrequently:true});
 let mode="text", proc="threshold", align="center", img=null, writeChar=null, device=null;
+let writeCandidates=[], selectedWriteKey="";
 let printState="idle";
 let abortRequested=false;
 let taps=0, jobSeq=0;
@@ -259,6 +266,39 @@ function updateDiag(){
 function setCanPrint(enabled){
   $("print").disabled=!enabled || !ALLOW_MAIN_PRINT;
   $("testM02").disabled=!enabled;
+  $("writeChannel").disabled=!enabled || writeCandidates.length<2;
+}
+
+function writeChannelLabel(item){
+  if(!item) return "—";
+  return `${item.serviceShort} / ${item.charShort} · ${propsOf(item.char)}`;
+}
+
+function currentWriteChannelLabel(){
+  return writeChannelLabel(writeCandidates.find(x=>x.key===selectedWriteKey));
+}
+
+function selectWriteChannel(key){
+  const item=writeCandidates.find(x=>x.key===key) || writeCandidates[0];
+  if(!item) return;
+  selectedWriteKey=item.key;
+  writeChar=item.char;
+  $("writeChannel").value=item.key;
+  logDiag(`WRITE CHANNEL SELECTED: ${writeChannelLabel(item)}`);
+  updateDiag();
+}
+
+function populateWriteChannels(){
+  const sel=$("writeChannel");
+  sel.innerHTML="";
+  for(const item of writeCandidates){
+    const opt=document.createElement("option");
+    opt.value=item.key;
+    opt.textContent=writeChannelLabel(item);
+    sel.appendChild(opt);
+  }
+  const ff02=writeCandidates.find(x=>x.charShort==="FF02");
+  selectWriteChannel((ff02||writeCandidates[0]).key);
 }
 
 function limitRasterLines(p,maxLines){
@@ -352,6 +392,7 @@ $("fs").oninput=()=>{$("fsVal").textContent=$("fs").value+" px"; render();};
 $("th").oninput=()=>{$("thVal").textContent=$("th").value; render();};
 $("copies").oninput=()=>{$("copiesVal").textContent="1";};
 $("text").oninput=render;
+$("writeChannel").onchange=()=>selectWriteChannel($("writeChannel").value);
 $("file").onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
   const im=new Image(); im.onload=()=>{img=im; render();}; im.src=URL.createObjectURL(f);
@@ -543,7 +584,7 @@ $("connect").onclick=async()=>{
     device.addEventListener("gattserverdisconnected",onDisc);
     const server=await device.gatt.connect();
     const services=await server.getPrimaryServices();
-    servicesSeen=[]; charsSeen=[]; writeChar=null;
+    servicesSeen=[]; charsSeen=[]; writeChar=null; writeCandidates=[]; selectedWriteKey="";
     flowCredits=0; flowWaiters=[]; lastCreditGrant=0;
     for(const s of services){
       servicesSeen.push(s.uuid);
@@ -551,19 +592,36 @@ $("connect").onclick=async()=>{
       for(const c of chars){
         const item={service:s.uuid,uuid:c.uuid,props:propsOf(c)};
         charsSeen.push(item);
-        if(shortUuid(c.uuid)==="FF02" && (c.properties.writeWithoutResponse||c.properties.write)) writeChar=c;
+        if(c.properties.writeWithoutResponse||c.properties.write){
+          writeCandidates.push({
+            key:`${shortUuid(s.uuid)}/${shortUuid(c.uuid)}/${writeCandidates.length}`,
+            service:s.uuid,
+            serviceShort:shortUuid(s.uuid),
+            char:c,
+            charShort:shortUuid(c.uuid)
+          });
+        }
         if(c.properties.notify) setupNotify(c);
       }
     }
-    if(!writeChar){
+    if(!writeCandidates.length){
       for(const c of charsSeen) logDiag(`CHAR: ${c.uuid} props=${c.props}`);
       for(const s of services){
         for(const c of await s.getCharacteristics()){
-        if(!writeChar && (c.properties.writeWithoutResponse||c.properties.write)) writeChar=c;
+          if(c.properties.writeWithoutResponse||c.properties.write){
+            writeCandidates.push({
+              key:`${shortUuid(s.uuid)}/${shortUuid(c.uuid)}/${writeCandidates.length}`,
+              service:s.uuid,
+              serviceShort:shortUuid(s.uuid),
+              char:c,
+              charShort:shortUuid(c.uuid)
+            });
+          }
         }
       }
     }
-    if(!writeChar) throw new Error("No encontré un canal de escritura. Pásame el reporte del inspector.");
+    if(!writeCandidates.length) throw new Error("No encontré un canal de escritura. Pásame el reporte del inspector.");
+    populateWriteChannels();
     $("dot").classList.add("on"); $("conn").textContent=device.name||"Conectada";
     setCanPrint(printState==="idle");
     $("stop").style.display="block";   // Detener siempre disponible tras conectar
@@ -579,7 +637,7 @@ $("connect").onclick=async()=>{
   }
 };
 function onDisc(){writeChar=null;$("dot").classList.remove("on");$("conn").textContent="Sin conectar";
-  setCanPrint(false); logDiag("GATT DISCONNECTED"); updateDiag(); setStatus("Se desconectó la impresora.","err");}
+  setCanPrint(false); $("writeChannel").disabled=true; logDiag("GATT DISCONNECTED"); updateDiag(); setStatus("Se desconectó la impresora.","err");}
 
 async function setupNotify(c){
   try{
@@ -745,6 +803,7 @@ $("copyDiag").onclick=async()=>{
     `App: ${APP_VERSION}`,
     `BLE: ${$("diagBle").textContent}`,
     `Device: ${$("diagDevice").textContent}`,
+    `Write channel: ${currentWriteChannelLabel()}`,
     `Job: ${$("diagJob").textContent}`,
     `Taps: ${$("diagTaps").textContent}`,
     `Writes: ${$("diagWrites").textContent}`,
