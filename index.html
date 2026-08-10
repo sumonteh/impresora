@@ -73,6 +73,17 @@
         padding:10px 12px;margin-top:16px;display:none}
   .foot{text-align:center;font-size:10.5px;color:var(--ink-soft);margin-top:26px;
         border-top:2px dashed var(--rule);padding-top:16px;letter-spacing:.05em}
+  details.diag{margin-top:20px;border-top:2px dashed var(--rule);padding-top:16px}
+  details.diag summary{cursor:pointer;font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+  .diag-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .diag-item{border:1px solid var(--rule);background:var(--paper-hi);padding:8px;min-width:0}
+  .diag-label{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .diag-value{font-size:11px;overflow-wrap:anywhere;margin-top:2px}
+  .diag-list,.diag-log{font-size:10px;background:var(--paper-hi);border:1px solid var(--rule);
+    padding:8px;margin-top:8px;white-space:pre-wrap;overflow:auto;max-height:190px}
+  .diag-log{max-height:260px}
+  .diag-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  @media (max-width:520px){.diag-grid,.diag-actions{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -130,7 +141,7 @@ la M02 🖨️</textarea>
 
   <div class="ctrl">
     <label>Copias <span id="copiesVal">1</span></label>
-    <input type="range" id="copies" min="1" max="10" value="1">
+    <input type="range" id="copies" min="1" max="1" value="1" disabled>
   </div>
 
   <div class="preview-wrap">
@@ -141,28 +152,100 @@ la M02 🖨️</textarea>
   </div>
 
   <button id="connect" class="act">⟐ Conectar impresora</button>
-  <button id="print" class="act print" disabled>▐ Imprimir</button>
+  <button id="print" class="act print" disabled>▐ Imprimir 1 copia</button>
+  <button id="testM02" class="act print" disabled>TEST M02 — UNA IMPRESIÓN</button>
   <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
 
   <div id="status" class="status">Enciende la M02 (3 s) y tenla cerca.</div>
   <div id="dbg" style="margin-top:6px;font-size:10px;letter-spacing:.08em;color:var(--ink-soft)">toques de Imprimir: 0</div>
 
+  <details class="diag" open>
+    <summary>Diagnóstico M02</summary>
+    <div class="diag-grid">
+      <div class="diag-item"><div class="diag-label">Estado BLE</div><div id="diagBle" class="diag-value">Desconectado</div></div>
+      <div class="diag-item"><div class="diag-label">Dispositivo</div><div id="diagDevice" class="diag-value">—</div></div>
+      <div class="diag-item"><div class="diag-label">Trabajo #</div><div id="diagJob" class="diag-value">0</div></div>
+      <div class="diag-item"><div class="diag-label">Pulsaciones</div><div id="diagTaps" class="diag-value">0</div></div>
+      <div class="diag-item"><div class="diag-label">BLE writes</div><div id="diagWrites" class="diag-value">0</div></div>
+      <div class="diag-item"><div class="diag-label">Bytes enviados</div><div id="diagBytes" class="diag-value">0</div></div>
+      <div class="diag-item"><div class="diag-label">Chunk / pausa</div><div id="diagChunk" class="diag-value">—</div></div>
+      <div class="diag-item"><div class="diag-label">Duración</div><div id="diagDuration" class="diag-value">—</div></div>
+    </div>
+    <div class="lbl">Servicios encontrados</div>
+    <div id="diagServices" class="diag-list">—</div>
+    <div class="lbl">Characteristics encontradas</div>
+    <div id="diagChars" class="diag-list">—</div>
+    <div class="diag-actions">
+      <button id="copyDiag" class="act" type="button">Copiar diagnóstico</button>
+      <button id="clearDiag" class="act" type="button">Limpiar log</button>
+    </div>
+    <div id="diagLog" class="diag-log">—</div>
+  </details>
+
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v13</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v14-diagnóstico</b>
   </div>
 </main>
 
 <script>
 const WIDTH=384, RB=48;               // 384 puntos = 48 bytes por línea
+const M02_SERVICE="0000ff00-0000-1000-8000-00805f9b34fb";
+const M02_WRITE="0000ff02-0000-1000-8000-00805f9b34fb";
+const M02_OPTIONAL_SERVICES=[
+  M02_SERVICE,
+  "000018f0-0000-1000-8000-00805f9b34fb",
+  "0000ae30-0000-1000-8000-00805f9b34fb",
+  "49535343-fe7d-4ae5-8fa9-9fafd205e455"
+];
+const CHUNK_SIZE=48;                  // una línea de raster por write BLE
+const CHUNK_DELAY_MS=30;              // ritmo conservador de la app original
 const $=id=>document.getElementById(id);
 const cv=$("preview"), ctx=cv.getContext("2d",{willReadFrequently:true});
 let mode="text", proc="threshold", align="center", img=null, writeChar=null, device=null;
-let printing=false;   // candado: un toque = una sola impresión
-let abort=false;      // bandera para detener el envío en curso
-let taps=0;           // diagnóstico: cuántas veces se disparó Imprimir
+let printState="idle";
+let abortRequested=false;
+let taps=0, jobSeq=0;
+let servicesSeen=[], charsSeen=[], diagLog=[];
+let currentJob=null;
 
 const setStatus=(m,c="")=>{$("status").textContent=m;$("status").className="status "+c;};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const hex=b=>Array.from(b,x=>x.toString(16).padStart(2,"0")).join(" ");
+const propsOf=c=>["read","write","writeWithoutResponse","notify"]
+  .filter(p=>c.properties[p]).join(", ") || "—";
+
+function nowStamp(){
+  const d=new Date(), z=(n,w=2)=>String(n).padStart(w,"0");
+  return `${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}.${z(d.getMilliseconds(),3)}`;
+}
+function logDiag(msg){
+  diagLog.push(`[${nowStamp()}] ${msg}`);
+  $("diagLog").textContent=diagLog.join("\n") || "—";
+}
+function setPrintState(next){
+  printState=next;
+  updateDiag();
+}
+function updateDiag(){
+  $("diagBle").textContent=writeChar ? "Conectado" : "Desconectado";
+  $("diagDevice").textContent=device ? (device.name||"(sin nombre)") : "—";
+  $("diagServices").textContent=servicesSeen.length ? servicesSeen.join("\n") : "—";
+  $("diagChars").textContent=charsSeen.length ? charsSeen.map(c=>
+    `${c.service}\n  ${c.uuid}\n  props: ${c.props}`).join("\n") : "—";
+  $("diagJob").textContent=currentJob ? `${currentJob.id} · ${printState}` : `0 · ${printState}`;
+  $("diagTaps").textContent=String(taps);
+  $("diagWrites").textContent=currentJob ? String(currentJob.writes) : "0";
+  $("diagBytes").textContent=currentJob ? String(currentJob.bytesSent) : "0";
+  $("diagChunk").textContent=currentJob ? `${currentJob.chunkSize} B / ${currentJob.delayMs} ms` : "—";
+  $("diagDuration").textContent=currentJob && currentJob.startedAt
+    ? `${Math.round(((currentJob.finishedAt||performance.now())-currentJob.startedAt))} ms` : "—";
+  $("dbg").textContent=`toques de Imprimir: ${taps} · estado: ${printState}`;
+}
+function setCanPrint(enabled){
+  $("print").disabled=!enabled;
+  $("testM02").disabled=!enabled;
+}
 
 // ---- soporte ----
 if(!navigator.bluetooth){
@@ -186,7 +269,7 @@ $("proc").onclick=e=>{const b=e.target.closest("button"); if(!b)return;
   proc=b.dataset.p; [...$("proc").children].forEach(x=>x.classList.toggle("active",x===b)); render();};
 $("fs").oninput=()=>{$("fsVal").textContent=$("fs").value+" px"; render();};
 $("th").oninput=()=>{$("thVal").textContent=$("th").value; render();};
-$("copies").oninput=()=>{$("copiesVal").textContent=$("copies").value;};
+$("copies").oninput=()=>{$("copiesVal").textContent="1";};
 $("text").oninput=render;
 $("file").onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
@@ -261,7 +344,11 @@ function applyMono(){
 function pack(){
   if(mode==="image" && !img) return null;
   applyMono();                                  // asegura B/N
-  const d=ctx.getImageData(0,0,WIDTH,cv.height).data, H=cv.height;
+  return packCanvas(cv);
+}
+function packCanvas(canvas){
+  const cctx=canvas.getContext("2d",{willReadFrequently:true});
+  const d=cctx.getImageData(0,0,WIDTH,canvas.height).data, H=canvas.height;
   const out=new Uint8Array(RB*H);
   for(let y=0;y<H;y++)for(let x=0;x<WIDTH;x++){
     const black = d[(y*WIDTH+x)*4] < 128;
@@ -270,23 +357,35 @@ function pack(){
   return {out,H};
 }
 
+function createTestRaster(){
+  const c=document.createElement("canvas"), cctx=c.getContext("2d");
+  c.width=WIDTH; c.height=136;
+  cctx.fillStyle="#fff"; cctx.fillRect(0,0,c.width,c.height);
+  cctx.strokeStyle="#000"; cctx.lineWidth=2; cctx.strokeRect(8,8,WIDTH-16,120);
+  cctx.fillStyle="#000"; cctx.textAlign="center"; cctx.textBaseline="top";
+  cctx.font="bold 34px monospace"; cctx.fillText("TEST M02",WIDTH/2,22);
+  cctx.font="28px monospace"; cctx.fillText("123456789",WIDTH/2,62);
+  const y=100, h=16, w=24, gap=8, start=(WIDTH-(8*w+7*gap+gap+4*w+3*gap))/2;
+  let x=start;
+  for(let i=0;i<4;i++,x+=w+gap)cctx.fillRect(x,y,w,h);
+  x+=gap;
+  for(let i=0;i<4;i++,x+=w+gap)cctx.fillRect(x,y,w,h);
+  return packCanvas(c);
+}
+
 // ---- comandos ESC/POS de la M02 ----
 function buildStream(packed,H){
   const parts=[];
-  parts.push([0x1b,0x40]);            // ESC @  inicializa
-  parts.push([0x1b,0x61,0x01]);       // ESC a  centrar
+  parts.push([0x1b,0x40,0x1f,0x11,0x02,0x04]); // ESC @ + init propietario M02
   let y=0;
-  // Bandas PEQUEÑAS: el búfer de líneas del M02 es chico. Si un solo GS v 0
-  // declara más líneas de las que caben, la impresora reimprime el búfer en
-  // bucle. Con bandas de 24 líneas cada bloque cabe y se imprime una sola vez.
-  const BAND=24;
+  const BAND=255;
   while(y<H){
     const n=Math.min(BAND,H-y);
     parts.push([0x1d,0x76,0x30,0x00, RB&0xff,(RB>>8)&0xff, n&0xff,(n>>8)&0xff]); // GS v 0
     parts.push(packed.subarray(y*RB,(y+n)*RB));
     y+=n;
   }
-  parts.push([0x1b,0x64,0x02]);       // avanza 2 líneas (mínimo, sin reset)
+  parts.push([0x1b,0x64,0x04]);       // avanza 4 líneas; no hay reset/cancel inventado
   let len=0; parts.forEach(p=>len+=p.length);
   const buf=new Uint8Array(len); let o=0;
   parts.forEach(p=>{buf.set(p,o); o+=p.length;});
@@ -297,97 +396,151 @@ function buildStream(packed,H){
 $("connect").onclick=async()=>{
   try{
     setStatus("Elige tu impresora (M02 o número de serie Qxxx)…");
-    // Bluefy (iOS) NO acepta UUIDs numéricos cortos (0xff00); van en forma larga de 128 bits.
+    logDiag("CONNECT CLICK");
     device=await navigator.bluetooth.requestDevice({
       acceptAllDevices:true,
-      optionalServices:[
-        "0000ff00-0000-1000-8000-00805f9b34fb",  // servicio principal M02
-        "0000ff02-0000-1000-8000-00805f9b34fb",  // característica de escritura
-        "000018f0-0000-1000-8000-00805f9b34fb",  // variantes Phomemo
-        "0000ae30-0000-1000-8000-00805f9b34fb",
-        "49535343-fe7d-4ae5-8fa9-9fafd205e455"   // UART transparente (algunos firmwares)
-      ]
+      optionalServices:M02_OPTIONAL_SERVICES
     });
+    logDiag(`DEVICE SELECTED: ${device.name||"(sin nombre)"} / ${device.id||"(sin id visible)"}`);
     device.addEventListener("gattserverdisconnected",onDisc);
     const server=await device.gatt.connect();
     const services=await server.getPrimaryServices();
-    // busca característica de escritura (prioriza ff02)
+    servicesSeen=[]; charsSeen=[]; writeChar=null;
     for(const s of services){
-      for(const c of await s.getCharacteristics()){
-        if(c.uuid.includes("ff02")) writeChar=c;
+      servicesSeen.push(s.uuid);
+      const chars=await s.getCharacteristics();
+      for(const c of chars){
+        const item={service:s.uuid,uuid:c.uuid,props:propsOf(c)};
+        charsSeen.push(item);
+        if(c.uuid.toLowerCase()===M02_WRITE && (c.properties.writeWithoutResponse||c.properties.write)) writeChar=c;
       }
     }
-    if(!writeChar) for(const s of services){
-      for(const c of await s.getCharacteristics()){
+    if(!writeChar){
+      for(const c of charsSeen) logDiag(`CHAR: ${c.uuid} props=${c.props}`);
+      for(const s of services){
+        for(const c of await s.getCharacteristics()){
         if(!writeChar && (c.properties.writeWithoutResponse||c.properties.write)) writeChar=c;
+        }
       }
     }
     if(!writeChar) throw new Error("No encontré un canal de escritura. Pásame el reporte del inspector.");
     $("dot").classList.add("on"); $("conn").textContent=device.name||"Conectada";
-    $("print").disabled=false;
+    setCanPrint(printState==="idle");
     $("stop").style.display="block";   // Detener siempre disponible tras conectar
+    logDiag(`WRITE CHARACTERISTIC: ${writeChar.uuid} props=${propsOf(writeChar)}`);
     setStatus("Conectada. Lista para imprimir.","ok");
+    updateDiag();
   }catch(err){
+    logDiag("CONNECT ERROR: "+(err.message||err.name||err));
     if(err.name==="NotFoundError") setStatus("Cancelado o no elegiste impresora.");
     else setStatus("Error: "+(err.message||err.name||err),"err");
   }
 };
 function onDisc(){writeChar=null;$("dot").classList.remove("on");$("conn").textContent="Sin conectar";
-  $("print").disabled=true; setStatus("Se desconectó la impresora.","err");}
+  setCanPrint(false); logDiag("GATT DISCONNECTED"); updateDiag(); setStatus("Se desconectó la impresora.","err");}
 
 // ---- imprimir ----
 $("print").onclick=async()=>{
-  taps++; const dbg=$("dbg"); if(dbg) dbg.textContent="toques de Imprimir: "+taps;
-  if(!writeChar || printing) return;   // ignora toques repetidos mientras imprime
+  taps++; logDiag(`PRINT CLICK #${taps}`); updateDiag();
+  if(!writeChar || printState!=="idle"){logDiag(`PRINT IGNORED state=${printState}`); return;}
   const p=pack();
   if(!p){setStatus("Elige una imagen primero.","err");return;}
-  const copies=Math.max(1,Math.min(10, parseInt($("copies").value,10)||1));
-  const stream=buildStream(p.out,p.H);
-  const kb=(stream.length/1024).toFixed(1);
-  try{
-    printing=true; abort=false;
-    $("print").disabled=true; $("stop").style.display="block";
-    // La M02 imprime en tiempo real y su búfer es MUY chico: si le mandamos
-    // los datos más rápido de lo que imprime, se satura, REPITE la copia y se
-    // DESCONECTA sola. Solución: enviar 1 línea (48 B) por paquete y esperar
-    // ~30 ms, que es el ritmo al que la M02 imprime (~1.5 KB/s). Sin respuesta.
-    const useNR = writeChar.properties.writeWithoutResponse;
-    const CHUNK=48;          // 1 línea por paquete
-    const PACE=30;           // ms entre líneas: no saturar el búfer del M02
-    const settle=800;        // pausa entre copias para que termine el papel
-    for(let c=1;c<=copies && !abort;c++){
-      for(let i=0;i<stream.length && !abort;i+=CHUNK){
-        const part=stream.subarray(i,i+CHUNK);
-        if(useNR) await writeChar.writeValueWithoutResponse(part);
-        else      await writeChar.writeValue(part);
-        await new Promise(r=>setTimeout(r, PACE));
-        const pct=Math.min(100,Math.round((i+CHUNK)/stream.length*100));
-        setStatus(`Copia ${c}/${copies} · ${p.H} líneas · ${kb} KB — ${pct}%`);
-      }
-      if(!abort){
-        setStatus(`Copia ${c}/${copies} impresa.`,"ok");
-        if(c<copies) await new Promise(r=>setTimeout(r,settle));
-      }
-    }
-    setStatus(abort ? "Detenido." : `¡Listo! ${copies} copia${copies>1?"s":""} · ${p.H} líneas.`, abort?"err":"ok");
-  }catch(err){ setStatus("Error al imprimir: "+(err.message||err.name||err),"err"); }
-  finally{ printing=false; $("print").disabled=false; }   // Detener sigue visible
+  await sendOneJob("PRINT",p);
 };
+
+$("testM02").onclick=async()=>{
+  taps++; logDiag(`TEST M02 CLICK #${taps}`); updateDiag();
+  if(!writeChar || printState!=="idle"){logDiag(`TEST IGNORED state=${printState}`); return;}
+  await sendOneJob("TEST M02",createTestRaster());
+};
+
+async function sendOneJob(label,p){
+  const stream=buildStream(p.out,p.H);
+  currentJob={id:++jobSeq,label,lines:p.H,payloadBytes:stream.length,writes:0,bytesSent:0,
+    chunkSize:CHUNK_SIZE,delayMs:CHUNK_DELAY_MS,startedAt:0,finishedAt:0};
+  try{
+    abortRequested=false;
+    setPrintState("preparing");
+    setCanPrint(false);
+    $("stop").style.display="block";
+    logDiag(`Job #${currentJob.id} created (${label})`);
+    logDiag(`Raster: ${WIDTH}x${p.H}`);
+    logDiag(`Payload: ${stream.length} bytes`);
+    logDiag(`Payload HEX: ${hex(stream)}`);
+    setPrintState("sending");
+    currentJob.startedAt=performance.now();
+    const total=Math.ceil(stream.length/CHUNK_SIZE);
+    const useNR=writeChar.properties.writeWithoutResponse;
+    for(let i=0,idx=1;i<stream.length;i+=CHUNK_SIZE,idx++){
+      if(abortRequested) throw new Error("Abortado por el usuario");
+      const part=stream.subarray(i,i+CHUNK_SIZE);
+      logDiag(`BLE write ${idx}/${total}: ${part.length} B ${useNR?"withoutResponse":"withResponse"}`);
+      if(useNR) await writeChar.writeValueWithoutResponse(part);
+      else await writeChar.writeValue(part);
+      currentJob.writes++;
+      currentJob.bytesSent+=part.length;
+      updateDiag();
+      await sleep(CHUNK_DELAY_MS);
+      const pct=Math.min(100,Math.round((i+CHUNK_SIZE)/stream.length*100));
+      setStatus(`${label} · ${p.H} líneas · ${(stream.length/1024).toFixed(1)} KB — ${pct}%`);
+    }
+    setPrintState("finishing");
+    currentJob.finishedAt=performance.now();
+    logDiag(`END JOB #${currentJob.id}`);
+    setStatus(`Listo: ${label} enviado una vez · ${p.H} líneas.`,"ok");
+    setPrintState("completed");
+  }catch(err){
+    currentJob.finishedAt=performance.now();
+    setPrintState(abortRequested ? "completed" : "error");
+    logDiag(`JOB #${currentJob.id} ERROR: ${err.message||err.name||err}`);
+    setStatus(abortRequested ? "Detenido. No se enviarán más bytes." :
+      "Error al imprimir: "+(err.message||err.name||err), abortRequested?"err":"err");
+  }finally{
+    abortRequested=false;
+    setPrintState("idle");
+    setCanPrint(!!writeChar);
+    updateDiag();
+  }
+}
 
 // ---- detener envío ----
 $("stop").onclick=async()=>{
-  abort=true;
+  abortRequested=true;
+  logDiag("ABORT CLICK: se detendrá el loop local; no se envía reset inventado");
   setStatus("Deteniendo…","err");
-  try{
-    if(writeChar){
-      const cmd=new Uint8Array([0x1b,0x40]);
-      if(writeChar.properties.writeWithoutResponse) await writeChar.writeValueWithoutResponse(cmd);
-      else await writeChar.writeValue(cmd);
-    }
-  }catch(e){}
 };
 
+$("copyDiag").onclick=async()=>{
+  const txt=[
+    `BLE: ${$("diagBle").textContent}`,
+    `Device: ${$("diagDevice").textContent}`,
+    `Job: ${$("diagJob").textContent}`,
+    `Taps: ${$("diagTaps").textContent}`,
+    `Writes: ${$("diagWrites").textContent}`,
+    `Bytes: ${$("diagBytes").textContent}`,
+    `Chunk: ${$("diagChunk").textContent}`,
+    `Duration: ${$("diagDuration").textContent}`,
+    "",
+    "Services:",
+    $("diagServices").textContent,
+    "",
+    "Characteristics:",
+    $("diagChars").textContent,
+    "",
+    "Log:",
+    diagLog.join("\n")
+  ].join("\n");
+  try{
+    await navigator.clipboard.writeText(txt);
+    setStatus("Diagnóstico copiado.","ok");
+  }catch(e){
+    setStatus("No pude copiar automáticamente. Selecciona el log y cópialo manualmente.","err");
+  }
+};
+$("clearDiag").onclick=()=>{diagLog=[]; currentJob=null; $("diagLog").textContent="—"; updateDiag();};
+
 render();
+updateDiag();
 </script>
 </body>
 </html>
