@@ -184,7 +184,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v15-bandas-seguras</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v16-bandas-sin-respuesta</b>
   </div>
 </main>
 
@@ -435,7 +435,7 @@ $("connect").onclick=async()=>{
     setCanPrint(printState==="idle");
     $("stop").style.display="block";   // Detener siempre disponible tras conectar
     logDiag(`WRITE CHARACTERISTIC: ${writeChar.uuid} props=${propsOf(writeChar)}`);
-    logDiag("WRITE MODE: withResponse preferred when available");
+    logDiag("WRITE MODE: withoutResponse preferred for Bluefy/M02");
     setStatus("Conectada. Lista para imprimir.","ok");
     updateDiag();
   }catch(err){
@@ -491,13 +491,13 @@ async function sendOneJob(label,p){
     setPrintState("sending");
     currentJob.startedAt=performance.now();
     const total=Math.ceil(stream.length/CHUNK_SIZE);
-    const useWithResponse=writeChar.properties.write;
+    const useWithoutResponse=writeChar.properties.writeWithoutResponse;
     for(let i=0,idx=1;i<stream.length;i+=CHUNK_SIZE,idx++){
       if(abortRequested) throw new Error("Abortado por el usuario");
       const part=stream.subarray(i,i+CHUNK_SIZE);
-      logDiag(`BLE write ${idx}/${total}: ${part.length} B ${useWithResponse?"withResponse":"withoutResponse"}`);
-      if(useWithResponse) await writeChar.writeValue(part);
-      else await writeChar.writeValueWithoutResponse(part);
+      logDiag(`BLE write ${idx}/${total}: ${part.length} B ${useWithoutResponse?"withoutResponse":"withResponse"}`);
+      if(useWithoutResponse) await writeChar.writeValueWithoutResponse(part);
+      else await writeChar.writeValue(part);
       currentJob.writes++;
       currentJob.bytesSent+=part.length;
       updateDiag();

@@ -75,7 +75,9 @@ The app initializes with `ESC @` and the M02-specific `1F 11 02 04` bytes that s
 
 ## Write method and chunking
 
-The app now prefers `writeValue` with response when the selected characteristic advertises it. If not available, it falls back to `writeValueWithoutResponse`.
+The app prefers `writeValueWithoutResponse` for `FF02` when available. If not available, it falls back to `writeValue`.
+
+Diagnostic v15 tried `writeValue` with response because `FF02` advertises it, but the real Bluefy/M02 path was too slow: only 6 packets / 288 bytes were sent in more than 10 seconds before user abort. That makes `withResponse` impractical for this printer/browser combination.
 
 Current diagnostic chunking:
 
@@ -84,7 +86,9 @@ Current diagnostic chunking:
 - Raster block height: 24 lines.
 - Full job retries: none.
 
-Reason for the change: the first diagnostic capture showed one tap, one job, 137 BLE writes, 6545 bytes, and no extra writes after `END JOB #1`. If the printer physically repeated after that, the browser did not resend the job. The likely causes are printer-side interpretation of one oversized raster block, write-without-response buffering, or both.
+Reason for the raster-band change: the first diagnostic capture showed one tap, one job, 137 BLE writes, 6545 bytes, and no extra writes after `END JOB #1`. If the printer physically repeated after that, the browser did not resend the job. The likely cause is printer-side interpretation of one oversized raster block.
+
+Reason for keeping `withoutResponse`: the second diagnostic capture showed `withResponse` was not usable in Bluefy for this device. The next test keeps safe raster bands but returns to the fast write method.
 
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 

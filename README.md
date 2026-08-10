@@ -12,10 +12,10 @@ Soporte experimental para imprimir directo en una Phomemo M02 desde una pagina w
 6. Espera a que el panel diga `END JOB`.
 7. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
 
-En la version `v15-bandas-seguras`, el log deberia mostrar:
+En la version `v16-bandas-sin-respuesta`, el log deberia mostrar:
 
-- `WRITE MODE: withResponse preferred when available`;
-- writes `withResponse` si Bluefy lo permite;
+- `WRITE MODE: withoutResponse preferred for Bluefy/M02`;
+- writes `withoutResponse`;
 - raster dividido en varios bloques pequenos de hasta 24 lineas;
 - ningun `BLE write` despues de `END JOB`.
 
