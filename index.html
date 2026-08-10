@@ -184,7 +184,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v14-diagnóstico</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v15-bandas-seguras</b>
   </div>
 </main>
 
@@ -200,6 +200,7 @@ const M02_OPTIONAL_SERVICES=[
 ];
 const CHUNK_SIZE=48;                  // una línea de raster por write BLE
 const CHUNK_DELAY_MS=30;              // ritmo conservador de la app original
+const RASTER_BAND_LINES=24;           // bloques chicos: evita reimpresión del búfer M02
 const $=id=>document.getElementById(id);
 const cv=$("preview"), ctx=cv.getContext("2d",{willReadFrequently:true});
 let mode="text", proc="threshold", align="center", img=null, writeChar=null, device=null;
@@ -214,6 +215,11 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const hex=b=>Array.from(b,x=>x.toString(16).padStart(2,"0")).join(" ");
 const propsOf=c=>["read","write","writeWithoutResponse","notify"]
   .filter(p=>c.properties[p]).join(", ") || "—";
+const shortUuid=u=>{
+  const s=String(u||"").toLowerCase();
+  const m=s.match(/^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$/);
+  return (m ? m[1] : s).toUpperCase();
+};
 
 function nowStamp(){
   const d=new Date(), z=(n,w=2)=>String(n).padStart(w,"0");
@@ -378,7 +384,7 @@ function buildStream(packed,H){
   const parts=[];
   parts.push([0x1b,0x40,0x1f,0x11,0x02,0x04]); // ESC @ + init propietario M02
   let y=0;
-  const BAND=255;
+  const BAND=RASTER_BAND_LINES;
   while(y<H){
     const n=Math.min(BAND,H-y);
     parts.push([0x1d,0x76,0x30,0x00, RB&0xff,(RB>>8)&0xff, n&0xff,(n>>8)&0xff]); // GS v 0
@@ -412,7 +418,8 @@ $("connect").onclick=async()=>{
       for(const c of chars){
         const item={service:s.uuid,uuid:c.uuid,props:propsOf(c)};
         charsSeen.push(item);
-        if(c.uuid.toLowerCase()===M02_WRITE && (c.properties.writeWithoutResponse||c.properties.write)) writeChar=c;
+        if(shortUuid(c.uuid)==="FF02" && (c.properties.writeWithoutResponse||c.properties.write)) writeChar=c;
+        if(c.properties.notify) setupNotify(c);
       }
     }
     if(!writeChar){
@@ -428,6 +435,7 @@ $("connect").onclick=async()=>{
     setCanPrint(printState==="idle");
     $("stop").style.display="block";   // Detener siempre disponible tras conectar
     logDiag(`WRITE CHARACTERISTIC: ${writeChar.uuid} props=${propsOf(writeChar)}`);
+    logDiag("WRITE MODE: withResponse preferred when available");
     setStatus("Conectada. Lista para imprimir.","ok");
     updateDiag();
   }catch(err){
@@ -438,6 +446,19 @@ $("connect").onclick=async()=>{
 };
 function onDisc(){writeChar=null;$("dot").classList.remove("on");$("conn").textContent="Sin conectar";
   setCanPrint(false); logDiag("GATT DISCONNECTED"); updateDiag(); setStatus("Se desconectó la impresora.","err");}
+
+async function setupNotify(c){
+  try{
+    c.addEventListener("characteristicvaluechanged",e=>{
+      const bytes=new Uint8Array(e.target.value.buffer);
+      logDiag(`NOTIFY ${shortUuid(c.uuid)}: ${hex(bytes)}`);
+    });
+    await c.startNotifications();
+    logDiag(`NOTIFY ENABLED: ${shortUuid(c.uuid)}`);
+  }catch(e){
+    logDiag(`NOTIFY SKIPPED ${shortUuid(c.uuid)}: ${e.message||e.name||e}`);
+  }
+}
 
 // ---- imprimir ----
 $("print").onclick=async()=>{
@@ -470,13 +491,13 @@ async function sendOneJob(label,p){
     setPrintState("sending");
     currentJob.startedAt=performance.now();
     const total=Math.ceil(stream.length/CHUNK_SIZE);
-    const useNR=writeChar.properties.writeWithoutResponse;
+    const useWithResponse=writeChar.properties.write;
     for(let i=0,idx=1;i<stream.length;i+=CHUNK_SIZE,idx++){
       if(abortRequested) throw new Error("Abortado por el usuario");
       const part=stream.subarray(i,i+CHUNK_SIZE);
-      logDiag(`BLE write ${idx}/${total}: ${part.length} B ${useNR?"withoutResponse":"withResponse"}`);
-      if(useNR) await writeChar.writeValueWithoutResponse(part);
-      else await writeChar.writeValue(part);
+      logDiag(`BLE write ${idx}/${total}: ${part.length} B ${useWithResponse?"withResponse":"withoutResponse"}`);
+      if(useWithResponse) await writeChar.writeValue(part);
+      else await writeChar.writeValueWithoutResponse(part);
       currentJob.writes++;
       currentJob.bytesSent+=part.length;
       updateDiag();

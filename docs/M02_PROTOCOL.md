@@ -28,6 +28,18 @@ Known M02-family UUIDs from public reverse engineering:
 
 The app now records the actual services and characteristics exposed by the real printer in the `Diagnóstico M02` panel. That real capture should be treated as more important than assumptions in code.
 
+Real Bluefy capture from `Mr.in_M02` exposed short UUID strings:
+
+- `FF00 / FF02`: write and writeWithoutResponse.
+- `FF00 / FF01`: notify.
+- `FF00 / FF03`: notify.
+- `180A`: device information characteristics.
+- Transparent UART service `49535343-FE7D-4AE5-8FA9-9FAFD205E455`.
+- `FEE7` service.
+- `FF80 / FF82`: write and writeWithoutResponse.
+
+The application now normalizes short and long UUID forms before selecting `FF02`.
+
 ## Raster format
 
 - Width: 384 px.
@@ -36,7 +48,8 @@ The app now records the actual services and characteristics exposed by the real 
 - Pixel meaning: `1 = black`, `0 = white`.
 - Raster command: `GS v 0`.
 - Width and line counts are little-endian.
-- Blocks are capped at 255 lines per public M02 notes.
+- Diagnostic v14 sent a single 136-line `GS v 0` block. The app sent it only once, but this is still unsafe for this real M02 firmware.
+- Diagnostic v15 splits raster data into 24-line blocks to avoid printer-side buffer replay.
 
 Raster block header:
 
@@ -54,21 +67,24 @@ The diagnostic job stream is:
 1B 40
 1F 11 02 04
 1D 76 30 00 30 00 <lines-low> <lines-high>
-<48 bytes per raster line>
+<48 bytes per raster line, at most 24 lines per block>
 1B 64 04
 ```
 
-The previous app initialized with `ESC @` and alignment, but did not send the M02-specific `1F 11 02 04` init bytes that several public implementations identify as part of M02 initialization.
+The app initializes with `ESC @` and the M02-specific `1F 11 02 04` bytes that several public implementations identify as part of M02 initialization.
 
 ## Write method and chunking
 
-The app prefers `writeValueWithoutResponse` when the selected characteristic advertises it. If not available, it falls back to `writeValue`.
+The app now prefers `writeValue` with response when the selected characteristic advertises it. If not available, it falls back to `writeValueWithoutResponse`.
 
 Current diagnostic chunking:
 
 - Chunk size: 48 bytes.
 - Delay between chunks: 30 ms.
+- Raster block height: 24 lines.
 - Full job retries: none.
+
+Reason for the change: the first diagnostic capture showed one tap, one job, 137 BLE writes, 6545 bytes, and no extra writes after `END JOB #1`. If the printer physically repeated after that, the browser did not resend the job. The likely causes are printer-side interpretation of one oversized raster block, write-without-response buffering, or both.
 
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
