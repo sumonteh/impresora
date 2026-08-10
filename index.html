@@ -198,13 +198,13 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v30-bottom-gap</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v31-ready-credit-gap</b>
   </div>
 </main>
 
 <script>
 const WIDTH=384, RB=48;               // 384 puntos = 48 bytes por línea
-const APP_VERSION="v30-bottom-gap";
+const APP_VERSION="v31-ready-credit-gap";
 const M02_SERVICE="0000ff00-0000-1000-8000-00805f9b34fb";
 const M02_WRITE="0000ff02-0000-1000-8000-00805f9b34fb";
 const M02_OPTIONAL_SERVICES=[
@@ -219,7 +219,7 @@ const RASTER_BAND_LINES=48;           // una sola banda corta, enviada en una ll
 const CREDIT_TIMEOUT_MS=6000;         // si FF03 no autoriza más datos, se detiene
 const MAX_SAFE_PRINT_LINES=120;       // limite temporal: 5 bandas, evita gastar rollo
 const MAX_TEST_RASTER_LINES=48;       // mantiene el test dentro de una sola banda/GATT write
-const TEST_BOTTOM_GAP_LINES=10;       // margen blanco entre impresiones manuales seguidas
+const TEST_BOTTOM_GAP_LINES=24;       // margen blanco entre impresiones manuales seguidas
 const MAX_TEST_CONTENT_LINES=MAX_TEST_RASTER_LINES-TEST_BOTTOM_GAP_LINES;
 const MAX_NATIVE_TEXT_BYTES=120;      // test nativo: una escritura corta para evitar repeticiones
 const ALLOW_MAIN_PRINT=false;         // bloqueado hasta resolver las 7 copias fisicas
@@ -369,9 +369,15 @@ function addFlowCredits(n, source){
 
 function onPrinterReady(source){
   logDiag(`PRINTER READY from ${source}`);
+  if(flowCredits<1 && lastCreditGrant>0){
+    flowCredits=1;
+    logDiag(`${source} ready-credit; available=${flowCredits}`);
+  }
   if(printState==="sending" && flowCredits===0 && flowWaiters.length && lastCreditGrant>0){
     addFlowCredits(lastCreditGrant,`${source} ready-refill`);
   }
+  while(flowCredits>0 && flowWaiters.length) flowWaiters.shift()();
+  updateDiag();
 }
 
 async function waitForFlowCredit(){

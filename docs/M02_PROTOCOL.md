@@ -123,6 +123,8 @@ Diagnostic v28 still produced 7 physical copies from 7 BLE write calls. Diagnost
 
 Diagnostic v29 confirmed the one-GATT-write approach prints one physical copy per tap. Diagnostic v30 keeps that transport behavior and adds blank raster rows at the bottom of the test image to create visible spacing between repeated manual tests without using a separate feed command.
 
+Diagnostic v30 exposed a credit-accounting issue after repeated manual tests: seven successful single-write jobs consumed the initial `FF03: 01 07` credits, while later `FF01 1A 0F 0C` ready notifications did not refill the local counter. Diagnostic v31 treats each ready notification as permission for at least one next single-write job and increases the bottom raster gap.
+
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
 ## Abort behavior
