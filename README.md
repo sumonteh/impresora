@@ -8,11 +8,12 @@ Soporte experimental para imprimir directo en una Phomemo M02 desde una pagina w
 2. Enciende la Phomemo M02 y dejala cerca del iPhone.
 3. Toca `Conectar impresora`.
 4. Elige la M02 en la lista Bluetooth.
-5. Para prueba segura, toca `TEST M02 — 2 BANDAS` una sola vez.
-6. Espera a que el panel diga `END JOB`.
-7. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
+5. Escribe exactamente el texto que quieres probar.
+6. Para prueba segura, toca `TEST — SOLO TEXTO` una sola vez.
+7. Espera a que el panel diga `END JOB`.
+8. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
 
-En la version `v21-safe-print`, la impresion normal vuelve a estar disponible, pero limitada temporalmente a 120 lineas para proteger el rollo.
+En la version `v22-text-only-test`, el test seguro imprime solo el texto escrito en el cuadro, sin marcos, barras ni contenido extra. La impresion normal sigue disponible, pero limitada temporalmente a 120 lineas para proteger el rollo.
 
 El log del test seguro deberia mostrar:
 
@@ -20,11 +21,11 @@ El log del test seguro deberia mostrar:
 - `FLOW CONTROL: FF03 credit gating enabled`;
 - `FLOW CREDIT +... from FF03`;
 - writes `withoutResponse` de hasta 180 bytes;
-- test de 2 bandas de 24 lineas;
-- `SEGMENT 1/2`;
+- `TEXT TEST: ... chars`;
+- segmentos de hasta 24 lineas;
+- `SEGMENT .../...`;
 - `PRINTER READY from FF01 1A0F0C`;
 - `FLOW CREDIT +7 from FF01 1A0F0C ready-refill`;
-- `SEGMENT 2/2`;
 - ningun `BLE write` despues de `END JOB`.
 
 El log de impresion normal puede mostrar:

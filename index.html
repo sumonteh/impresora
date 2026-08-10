@@ -153,7 +153,7 @@ la M02 🖨️</textarea>
 
   <button id="connect" class="act">⟐ Conectar impresora</button>
   <button id="print" class="act print" disabled>▐ Imprimir seguro — máx. 120 líneas</button>
-  <button id="testM02" class="act print" disabled>TEST M02 — 2 BANDAS</button>
+  <button id="testM02" class="act print" disabled>TEST — SOLO TEXTO</button>
   <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
 
   <div id="status" class="status">Enciende la M02 (3 s) y tenla cerca.</div>
@@ -184,7 +184,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v21-safe-print</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v22-text-only-test</b>
   </div>
 </main>
 
@@ -418,20 +418,42 @@ function packCanvas(canvas){
   return {out,H};
 }
 
-function createTestRaster(){
-  const c=document.createElement("canvas"), cctx=c.getContext("2d");
-  c.width=WIDTH; c.height=48;
-  cctx.fillStyle="#fff"; cctx.fillRect(0,0,c.width,c.height);
-  cctx.strokeStyle="#000"; cctx.lineWidth=2; cctx.strokeRect(8,4,WIDTH-16,16);
-  cctx.strokeRect(8,28,WIDTH-16,16);
-  cctx.fillStyle="#000"; cctx.textAlign="center"; cctx.textBaseline="top";
-  cctx.font="bold 16px monospace"; cctx.fillText("M02 A",WIDTH/2,5);
-  cctx.fillText("M02 B",WIDTH/2,29);
-  const h=2, w=20, gap=6, start=(WIDTH-(4*w+3*gap))/2;
-  for(const y of [21,45]){
-    let x=start;
-    for(let i=0;i<4;i++,x+=w+gap)cctx.fillRect(x,y,w,h);
+function createTextOnlyTestRaster(){
+  const raw=$("text").value||"";
+  if(!raw.trim()){
+    setStatus("Escribe algo primero para hacer el test de texto.","err");
+    return null;
   }
+  const c=document.createElement("canvas"), cctx=c.getContext("2d");
+  const size=+$("fs").value, pad=8, lh=Math.round(size*1.25);
+  cctx.font=`${size}px ${getComputedStyle(document.body).fontFamily}`;
+  const lines=[];
+  raw.split("\n").forEach(par=>{
+    const words=par.split(" ");
+    let cur="";
+    for(const w of words){
+      const test=cur ? cur+" "+w : w;
+      if(cctx.measureText(test).width>WIDTH-pad*2 && cur){
+        lines.push(cur);
+        cur=w;
+      }else{
+        cur=test;
+      }
+    }
+    lines.push(cur);
+  });
+  c.width=WIDTH;
+  c.height=Math.max(lh, lines.length*lh+pad*2);
+  cctx.fillStyle="#fff"; cctx.fillRect(0,0,c.width,c.height);
+  cctx.fillStyle="#000"; cctx.textBaseline="top";
+  cctx.font=`${size}px ${getComputedStyle(document.body).fontFamily}`;
+  lines.forEach((ln,i)=>{
+    const w=cctx.measureText(ln).width;
+    let x=pad;
+    if(align==="center") x=(WIDTH-w)/2;
+    if(align==="right") x=WIDTH-w-pad;
+    cctx.fillText(ln,x,pad+i*lh);
+  });
   return packCanvas(c);
 }
 
@@ -537,8 +559,8 @@ async function setupNotify(c){
 $("print").onclick=async()=>{
   taps++; logDiag(`PRINT CLICK #${taps}`); updateDiag();
   if(!ALLOW_MAIN_PRINT){
-    logDiag("PRINT BLOCKED: modo diagnostico protege el rollo; usa TEST M02 — 2 BANDAS");
-    setStatus("Impresion normal bloqueada por seguridad. Usa TEST M02 — 2 BANDAS.","err");
+    logDiag("PRINT BLOCKED: modo diagnostico protege el rollo; usa TEST — SOLO TEXTO");
+    setStatus("Impresion normal bloqueada por seguridad. Usa TEST — SOLO TEXTO.","err");
     return;
   }
   if(!writeChar || printState!=="idle"){logDiag(`PRINT IGNORED state=${printState}`); return;}
@@ -549,9 +571,13 @@ $("print").onclick=async()=>{
 };
 
 $("testM02").onclick=async()=>{
-  taps++; logDiag(`TEST M02 CLICK #${taps}`); updateDiag();
+  taps++; logDiag(`TEXT TEST CLICK #${taps}`); updateDiag();
   if(!writeChar || printState!=="idle"){logDiag(`TEST IGNORED state=${printState}`); return;}
-  await sendOneJob("TEST M02",createTestRaster());
+  let p=createTextOnlyTestRaster();
+  if(!p) return;
+  logDiag(`TEXT TEST: ${($("text").value||"").length} chars`);
+  p=limitRasterLines(p,MAX_SAFE_PRINT_LINES);
+  await sendOneJob("TEST TEXTO",p);
 };
 
 async function sendOneJob(label,p){

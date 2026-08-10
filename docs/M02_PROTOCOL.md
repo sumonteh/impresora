@@ -9,7 +9,7 @@ Current flow after this diagnostic iteration:
 1. User taps `Conectar impresora`.
 2. Web Bluetooth requests a device with M02-compatible optional services.
 3. The app connects to GATT, lists every service and characteristic, and selects the write characteristic.
-4. User taps `TEST M02 — UNA IMPRESIÓN` or `Imprimir 1 copia`.
+4. User taps `TEST — SOLO TEXTO` or the safe print button.
 5. The app locks the print state from `idle` to `preparing`.
 6. A 384 px wide monochrome raster is packed as 1 bpp, MSB first, with `1 = black`.
 7. A single byte stream is built.
@@ -107,6 +107,8 @@ Diagnostic v18 completed the 1169-byte micro test in 7 writes using the initial 
 Diagnostic v19 showed no new `FF03` credit frame after band 1, but `FF01` repeatedly sent `1A 0F 0C` after the first band. Diagnostic v20 treats that frame as "printer ready / band complete" and refills one last known credit window (`+7`) only while the app is actively waiting for the next segment.
 
 Diagnostic v20 completed two 24-line bands: the second band started only after `FF01 1A 0F 0C` refilled the last known credit grant. Diagnostic v21 enables the normal print button again, but caps jobs at 120 lines until longer jobs are validated.
+
+Diagnostic v22 changes the dedicated test button to print only the textarea content using the current font size and alignment. It does not add boxes, bars, labels, or any other test artwork. The text-only test still uses the same 24-line segments, BLE credit gate, and 120-line safety cap as normal safe printing.
 
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 
