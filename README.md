@@ -8,11 +8,13 @@ Soporte experimental para imprimir directo en una Phomemo M02 desde una pagina w
 2. Enciende la Phomemo M02 y dejala cerca del iPhone.
 3. Toca `Conectar impresora`.
 4. Elige la M02 en la lista Bluetooth.
-5. Toca `TEST M02 — 2 BANDAS` una sola vez.
+5. Para prueba segura, toca `TEST M02 — 2 BANDAS` una sola vez.
 6. Espera a que el panel diga `END JOB`.
 7. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
 
-En la version `v20-ready-refill`, la impresion normal esta bloqueada para proteger el rollo. El log deberia mostrar:
+En la version `v21-safe-print`, la impresion normal vuelve a estar disponible, pero limitada temporalmente a 120 lineas para proteger el rollo.
+
+El log del test seguro deberia mostrar:
 
 - `WRITE MODE: withoutResponse preferred for Bluefy/M02`;
 - `FLOW CONTROL: FF03 credit gating enabled`;
@@ -24,6 +26,12 @@ En la version `v20-ready-refill`, la impresion normal esta bloqueada para proteg
 - `FLOW CREDIT +7 from FF01 1A0F0C ready-refill`;
 - `SEGMENT 2/2`;
 - ningun `BLE write` despues de `END JOB`.
+
+El log de impresion normal puede mostrar:
+
+- `SAFETY CROP: ... lines -> 120 lines`, si el contenido era mas alto;
+- segmentos de 24 lineas;
+- recargas por `FF01 1A0F0C ready-refill`.
 
 ## Diagnostico M02
 

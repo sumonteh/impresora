@@ -152,7 +152,7 @@ la M02 🖨️</textarea>
   </div>
 
   <button id="connect" class="act">⟐ Conectar impresora</button>
-  <button id="print" class="act print" disabled>▐ Imprimir bloqueado en diagnóstico</button>
+  <button id="print" class="act print" disabled>▐ Imprimir seguro — máx. 120 líneas</button>
   <button id="testM02" class="act print" disabled>TEST M02 — 2 BANDAS</button>
   <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
 
@@ -184,7 +184,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v20-ready-refill</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v21-safe-print</b>
   </div>
 </main>
 
@@ -202,7 +202,8 @@ const CHUNK_SIZE=180;                 // un crédito FF03 parece autorizar un pa
 const CHUNK_DELAY_MS=30;              // ritmo conservador de la app original
 const RASTER_BAND_LINES=24;           // bloques chicos: evita reimpresión del búfer M02
 const CREDIT_TIMEOUT_MS=6000;         // si FF03 no autoriza más datos, se detiene
-const ALLOW_MAIN_PRINT=false;         // proteger papel hasta validar flujo FF03
+const MAX_SAFE_PRINT_LINES=120;       // limite temporal: 5 bandas, evita gastar rollo
+const ALLOW_MAIN_PRINT=true;          // habilitado con limite y control de flujo
 const $=id=>document.getElementById(id);
 const cv=$("preview"), ctx=cv.getContext("2d",{willReadFrequently:true});
 let mode="text", proc="threshold", align="center", img=null, writeChar=null, device=null;
@@ -253,8 +254,15 @@ function updateDiag(){
   $("dbg").textContent=`toques de Imprimir: ${taps} · estado: ${printState}`;
 }
 function setCanPrint(enabled){
-  $("print").disabled=true;
+  $("print").disabled=!enabled || !ALLOW_MAIN_PRINT;
   $("testM02").disabled=!enabled;
+}
+
+function limitRasterLines(p,maxLines){
+  if(p.H<=maxLines) return p;
+  logDiag(`SAFETY CROP: ${p.H} lines -> ${maxLines} lines`);
+  setStatus(`Recortado temporalmente a ${maxLines} líneas para proteger el rollo.`,"err");
+  return {out:p.out.subarray(0,RB*maxLines),H:maxLines};
 }
 
 function addFlowCredits(n, source){
@@ -534,8 +542,9 @@ $("print").onclick=async()=>{
     return;
   }
   if(!writeChar || printState!=="idle"){logDiag(`PRINT IGNORED state=${printState}`); return;}
-  const p=pack();
+  let p=pack();
   if(!p){setStatus("Elige una imagen primero.","err");return;}
+  p=limitRasterLines(p,MAX_SAFE_PRINT_LINES);
   await sendOneJob("PRINT",p);
 };
 
