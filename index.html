@@ -153,7 +153,7 @@ la M02 🖨️</textarea>
 
   <button id="connect" class="act">⟐ Conectar impresora</button>
   <button id="print" class="act print" disabled>▐ Imprimir seguro — máx. 120 líneas</button>
-  <button id="testM02" class="act print" disabled>TEST — TEXTO 1 VEZ</button>
+  <button id="testM02" class="act print" disabled>TEST — RASTER 1 VEZ</button>
   <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
 
   <div id="status" class="status">Enciende la M02 (3 s) y tenla cerca.</div>
@@ -184,13 +184,13 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v25-diagnostic-version</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v26-single-band-raster</b>
   </div>
 </main>
 
 <script>
 const WIDTH=384, RB=48;               // 384 puntos = 48 bytes por línea
-const APP_VERSION="v25-diagnostic-version";
+const APP_VERSION="v26-single-band-raster";
 const M02_SERVICE="0000ff00-0000-1000-8000-00805f9b34fb";
 const M02_WRITE="0000ff02-0000-1000-8000-00805f9b34fb";
 const M02_OPTIONAL_SERVICES=[
@@ -204,6 +204,7 @@ const CHUNK_DELAY_MS=30;              // ritmo conservador de la app original
 const RASTER_BAND_LINES=24;           // bloques chicos: evita reimpresión del búfer M02
 const CREDIT_TIMEOUT_MS=6000;         // si FF03 no autoriza más datos, se detiene
 const MAX_SAFE_PRINT_LINES=120;       // limite temporal: 5 bandas, evita gastar rollo
+const MAX_TEST_RASTER_LINES=24;       // prueba actual: nunca pasa a una segunda banda
 const MAX_NATIVE_TEXT_BYTES=120;      // test nativo: una escritura corta para evitar repeticiones
 const ALLOW_MAIN_PRINT=false;         // bloqueado hasta resolver las 7 copias fisicas
 const $=id=>document.getElementById(id);
@@ -600,8 +601,8 @@ async function setupNotify(c){
 $("print").onclick=async()=>{
   taps++; logDiag(`PRINT CLICK #${taps}`); updateDiag();
   if(!ALLOW_MAIN_PRINT){
-    logDiag("PRINT BLOCKED: modo diagnostico protege el rollo; usa TEST — TEXTO 1 VEZ");
-    setStatus("Impresion normal bloqueada por seguridad. Usa TEST — TEXTO 1 VEZ.","err");
+    logDiag("PRINT BLOCKED: modo diagnostico protege el rollo; usa TEST — RASTER 1 VEZ");
+    setStatus("Impresion normal bloqueada por seguridad. Usa TEST — RASTER 1 VEZ.","err");
     return;
   }
   if(!writeChar || printState!=="idle"){logDiag(`PRINT IGNORED state=${printState}`); return;}
@@ -612,12 +613,14 @@ $("print").onclick=async()=>{
 };
 
 $("testM02").onclick=async()=>{
-  taps++; logDiag(`NATIVE TEXT TEST CLICK #${taps}`); updateDiag();
+  taps++; logDiag(`SINGLE BAND RASTER TEST CLICK #${taps}`); updateDiag();
   if(!writeChar || printState!=="idle"){logDiag(`TEST IGNORED state=${printState}`); return;}
-  const payload=buildNativeTextPayload();
-  if(!payload) return;
-  logDiag(`NATIVE TEXT TEST: ${($("text").value||"").length} chars / ${payload.length} bytes`);
-  await sendRawJob("TEST TEXTO NATIVO",payload);
+  let p=createTextOnlyTestRaster();
+  if(!p) return;
+  logDiag(`SINGLE BAND RASTER TEST: ${($("text").value||"").length} chars`);
+  p=trimRasterVertical(p);
+  p=limitRasterLines(p,MAX_TEST_RASTER_LINES);
+  await sendOneJob("TEST RASTER 1 BANDA",p);
 };
 
 async function sendRawJob(label,payload){

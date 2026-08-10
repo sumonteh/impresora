@@ -9,10 +9,10 @@ Current flow after this diagnostic iteration:
 1. User taps `Conectar impresora`.
 2. Web Bluetooth requests a device with M02-compatible optional services.
 3. The app connects to GATT, lists every service and characteristic, and selects the write characteristic.
-4. User taps `TEST — TEXTO 1 VEZ`.
+4. User taps `TEST — RASTER 1 VEZ`.
 5. The app locks the print state from `idle` to `preparing`.
-6. Diagnostic v24 builds a short native ESC/POS text payload, capped to 120 bytes.
-7. The payload is fragmented into BLE writes only if it exceeds the 180 byte chunk size.
+6. Diagnostic v26 rasterizes the textarea content, trims blank vertical rows, and caps it to one 24-line raster band.
+7. The payload should fit in the initial credit window and should not wait for a second ready-refill.
 8. Each write is sent once, with no retry of the full job.
 9. On completion or error, the state returns to `idle`.
 
@@ -112,6 +112,8 @@ Diagnostic v22 changes the dedicated test button to print only the textarea cont
 Diagnostic v23 trims fully blank raster rows above and below the text-only test before sending. This keeps the test focused on visible text and avoids spending paper on empty vertical padding.
 
 The real printer still produced 7 physical copies after the v23 text-only raster test, even though the browser log showed one job and no writes after `END JOB`. Diagnostic v24 blocks normal raster printing again and changes the test button to a short native ESC/POS text probe. It sends no `GS v 0` raster bands and does not use the `FF03: 01 07` value as a send-window refill. Diagnostic v25 adds the loaded app version to the copied diagnostic report and connection log to catch stale browser pages.
+
+Diagnostic v25 confirmed native text writes are accepted by BLE but do not print on the M02. Diagnostic v26 returns to raster mode, but restricts the test to a single raster band so the job never crosses into a second `GS v 0` block or a ready-refill window.
 
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 

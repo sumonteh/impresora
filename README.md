@@ -9,18 +9,19 @@ Soporte experimental para imprimir directo en una Phomemo M02 desde una pagina w
 3. Toca `Conectar impresora`.
 4. Elige la M02 en la lista Bluetooth.
 5. Escribe exactamente el texto que quieres probar.
-6. Para prueba segura, toca `TEST — TEXTO 1 VEZ` una sola vez.
+6. Para prueba segura, toca `TEST — RASTER 1 VEZ` una sola vez.
 7. Espera a que el panel diga `END JOB`.
 8. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
 
-En la version `v25-diagnostic-version`, la impresion normal queda bloqueada otra vez porque la M02 imprimio 7 copias fisicas aunque la pagina envio un solo trabajo. El test seguro manda texto nativo en un paquete corto, sin raster, sin bandas y sin reutilizar el valor `7` como permiso para seguir enviando. El diagnostico copiado incluye la version exacta de la pagina cargada.
+En la version `v26-single-band-raster`, la impresion normal queda bloqueada. La M02 ignoro el texto nativo, asi que el test vuelve a raster, pero limitado a una sola banda de 24 lineas como maximo para evitar el salto a una segunda banda.
 
 El log del test seguro deberia mostrar:
 
 - `WRITE MODE: withoutResponse preferred for Bluefy/M02`;
-- `APP VERSION: v25-diagnostic-version`;
-- `NATIVE TEXT TEST: ... chars / ... bytes`;
-- `BLE raw write 1/1`, si el texto cabe en una escritura;
+- `APP VERSION: v26-single-band-raster`;
+- `SINGLE BAND RASTER TEST: ... chars`;
+- `SEGMENT 1/1`;
+- hasta 7 `BLE write`;
 - ningun `BLE write` despues de `END JOB`.
 
 La impresion normal queda bloqueada temporalmente hasta resolver la repeticion fisica de 7 copias.
