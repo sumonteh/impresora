@@ -12,12 +12,12 @@ Soporte experimental para imprimir directo en una Phomemo M02 desde una pagina w
 6. Espera a que el panel diga `END JOB`.
 7. Si imprime mas de una vez, toca `Copiar diagnóstico` y pega aqui el resultado completo.
 
-En la version `v17-flow-control`, la impresion normal esta bloqueada para proteger el rollo. El log deberia mostrar:
+En la version `v18-credit-chunks`, la impresion normal esta bloqueada para proteger el rollo. El log deberia mostrar:
 
 - `WRITE MODE: withoutResponse preferred for Bluefy/M02`;
 - `FLOW CONTROL: FF03 credit gating enabled`;
 - `FLOW CREDIT +... from FF03`;
-- writes `withoutResponse`;
+- writes `withoutResponse` de hasta 180 bytes;
 - test micro de 24 lineas;
 - ningun `BLE write` despues de `END JOB`.
 

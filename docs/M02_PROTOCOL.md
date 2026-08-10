@@ -13,7 +13,7 @@ Current flow after this diagnostic iteration:
 5. The app locks the print state from `idle` to `preparing`.
 6. A 384 px wide monochrome raster is packed as 1 bpp, MSB first, with `1 = black`.
 7. A single byte stream is built.
-8. The stream is fragmented into 48 byte BLE writes.
+8. The stream is fragmented into BLE writes. Diagnostic v18 uses 180 byte chunks while testing `FF03` credits.
 9. Each write is sent once, with no retry of the full job.
 10. On completion or error, the state returns to `idle`.
 
@@ -81,7 +81,7 @@ Diagnostic v15 tried `writeValue` with response because `FF02` advertises it, bu
 
 Current diagnostic chunking:
 
-- Chunk size: 48 bytes.
+- Chunk size: 180 bytes while flow-control testing is active.
 - Delay between chunks: 30 ms.
 - Raster block height: 24 lines.
 - Full job retries: none.
@@ -99,6 +99,8 @@ NOTIFY FF03: 01 07
 Current interpretation: `FF03` is likely credit-based flow control. Sending 93 packets without consuming credits can overflow the device-side buffer and leave the firmware printing from its own queue, which the browser cannot abort after the fact.
 
 Diagnostic v17 gates every BLE write behind `FF03` credits. If no new credit arrives, the app stops with a timeout instead of dumping the full raster into the printer. The regular print button is temporarily blocked; only the micro test is enabled until the flow-control behavior is confirmed.
+
+Diagnostic v17 confirmed only the initial `+7` credits arrived. With 48-byte packets, that allowed only 336 bytes and the micro test stopped safely. Diagnostic v18 treats each credit as one BLE-packet credit rather than one raster-line credit. The 1169-byte micro test should fit in 7 writes at 180 bytes each while still respecting the initial credits.
 
 These values are intentionally visible in the diagnostic panel. They are not treated as proof of correctness; the next real Bluefy log should confirm whether the printer accepts the sequence once and returns to ready state.
 

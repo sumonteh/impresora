@@ -184,7 +184,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v17-flow-control</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v18-credit-chunks</b>
   </div>
 </main>
 
@@ -198,7 +198,7 @@ const M02_OPTIONAL_SERVICES=[
   "0000ae30-0000-1000-8000-00805f9b34fb",
   "49535343-fe7d-4ae5-8fa9-9fafd205e455"
 ];
-const CHUNK_SIZE=48;                  // una línea de raster por write BLE
+const CHUNK_SIZE=180;                 // un crédito FF03 parece autorizar un paquete BLE, no una línea
 const CHUNK_DELAY_MS=30;              // ritmo conservador de la app original
 const RASTER_BAND_LINES=24;           // bloques chicos: evita reimpresión del búfer M02
 const CREDIT_TIMEOUT_MS=6000;         // si FF03 no autoriza más datos, se detiene
