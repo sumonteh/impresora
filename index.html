@@ -153,7 +153,7 @@ la M02 🖨️</textarea>
 
   <button id="connect" class="act">⟐ Conectar impresora</button>
   <button id="print" class="act print" disabled>▐ Imprimir bloqueado en diagnóstico</button>
-  <button id="testM02" class="act print" disabled>TEST M02 — MICRO</button>
+  <button id="testM02" class="act print" disabled>TEST M02 — 2 BANDAS</button>
   <button id="stop" class="act" style="display:none;background:#7a3327">■ Detener</button>
 
   <div id="status" class="status">Enciende la M02 (3 s) y tenla cerca.</div>
@@ -184,7 +184,7 @@ la M02 🖨️</textarea>
 
   <div class="foot">
     Chrome/Edge en Android o escritorio · servir por https.<br>
-    En iPhone usa el navegador Bluefy. · versión <b id="ver">v18-credit-chunks</b>
+    En iPhone usa el navegador Bluefy. · versión <b id="ver">v19-band-credits</b>
   </div>
 </main>
 
@@ -403,30 +403,46 @@ function packCanvas(canvas){
 
 function createTestRaster(){
   const c=document.createElement("canvas"), cctx=c.getContext("2d");
-  c.width=WIDTH; c.height=24;
+  c.width=WIDTH; c.height=48;
   cctx.fillStyle="#fff"; cctx.fillRect(0,0,c.width,c.height);
   cctx.strokeStyle="#000"; cctx.lineWidth=2; cctx.strokeRect(8,4,WIDTH-16,16);
+  cctx.strokeRect(8,28,WIDTH-16,16);
   cctx.fillStyle="#000"; cctx.textAlign="center"; cctx.textBaseline="top";
-  cctx.font="bold 16px monospace"; cctx.fillText("M02",WIDTH/2,5);
-  const y=21, h=2, w=20, gap=6, start=(WIDTH-(4*w+3*gap))/2;
-  let x=start;
-  for(let i=0;i<4;i++,x+=w+gap)cctx.fillRect(x,y,w,h);
+  cctx.font="bold 16px monospace"; cctx.fillText("M02 A",WIDTH/2,5);
+  cctx.fillText("M02 B",WIDTH/2,29);
+  const h=2, w=20, gap=6, start=(WIDTH-(4*w+3*gap))/2;
+  for(const y of [21,45]){
+    let x=start;
+    for(let i=0;i<4;i++,x+=w+gap)cctx.fillRect(x,y,w,h);
+  }
   return packCanvas(c);
 }
 
 // ---- comandos ESC/POS de la M02 ----
 function buildStream(packed,H){
-  const parts=[];
-  parts.push([0x1b,0x40,0x1f,0x11,0x02,0x04]); // ESC @ + init propietario M02
+  const segments=buildSegments(packed,H);
+  return concatParts(segments.map(s=>s.bytes));
+}
+
+function buildSegments(packed,H){
+  const segments=[];
   let y=0;
-  const BAND=RASTER_BAND_LINES;
+  let first=true;
   while(y<H){
-    const n=Math.min(BAND,H-y);
+    const n=Math.min(RASTER_BAND_LINES,H-y);
+    const parts=[];
+    if(first) parts.push([0x1b,0x40,0x1f,0x11,0x02,0x04]); // ESC @ + init propietario M02
     parts.push([0x1d,0x76,0x30,0x00, RB&0xff,(RB>>8)&0xff, n&0xff,(n>>8)&0xff]); // GS v 0
     parts.push(packed.subarray(y*RB,(y+n)*RB));
+    if(y+n>=H) parts.push([0x1b,0x64,0x04]); // avanza 4 líneas; no hay reset/cancel inventado
+    segments.push({startLine:y, lines:n, bytes:concatParts(parts)});
     y+=n;
+    first=false;
   }
-  parts.push([0x1b,0x64,0x04]);       // avanza 4 líneas; no hay reset/cancel inventado
+  return segments;
+}
+
+function concatParts(parts){
   let len=0; parts.forEach(p=>len+=p.length);
   const buf=new Uint8Array(len); let o=0;
   parts.forEach(p=>{buf.set(p,o); o+=p.length;});
@@ -503,8 +519,8 @@ async function setupNotify(c){
 $("print").onclick=async()=>{
   taps++; logDiag(`PRINT CLICK #${taps}`); updateDiag();
   if(!ALLOW_MAIN_PRINT){
-    logDiag("PRINT BLOCKED: modo diagnostico protege el rollo; usa TEST M02 — MICRO");
-    setStatus("Impresion normal bloqueada por seguridad. Usa TEST M02 — MICRO.","err");
+    logDiag("PRINT BLOCKED: modo diagnostico protege el rollo; usa TEST M02 — 2 BANDAS");
+    setStatus("Impresion normal bloqueada por seguridad. Usa TEST M02 — 2 BANDAS.","err");
     return;
   }
   if(!writeChar || printState!=="idle"){logDiag(`PRINT IGNORED state=${printState}`); return;}
@@ -520,7 +536,8 @@ $("testM02").onclick=async()=>{
 };
 
 async function sendOneJob(label,p){
-  const stream=buildStream(p.out,p.H);
+  const segments=buildSegments(p.out,p.H);
+  const stream=concatParts(segments.map(s=>s.bytes));
   currentJob={id:++jobSeq,label,lines:p.H,payloadBytes:stream.length,writes:0,bytesSent:0,
     chunkSize:CHUNK_SIZE,delayMs:CHUNK_DELAY_MS,startedAt:0,finishedAt:0};
   try{
@@ -531,25 +548,31 @@ async function sendOneJob(label,p){
     logDiag(`Job #${currentJob.id} created (${label})`);
     logDiag(`Raster: ${WIDTH}x${p.H}`);
     logDiag(`Payload: ${stream.length} bytes`);
+    logDiag(`Segments: ${segments.map(s=>`${s.lines} lines/${s.bytes.length} B`).join(" | ")}`);
     logDiag(`Payload HEX: ${hex(stream)}`);
     setPrintState("sending");
     currentJob.startedAt=performance.now();
-    const total=Math.ceil(stream.length/CHUNK_SIZE);
+    const total=segments.reduce((sum,s)=>sum+Math.ceil(s.bytes.length/CHUNK_SIZE),0);
     const useWithoutResponse=writeChar.properties.writeWithoutResponse;
-    for(let i=0,idx=1;i<stream.length;i+=CHUNK_SIZE,idx++){
-      if(abortRequested) throw new Error("Abortado por el usuario");
-      await waitForFlowCredit();
-      if(abortRequested) throw new Error("Abortado por el usuario");
-      const part=stream.subarray(i,i+CHUNK_SIZE);
-      logDiag(`BLE write ${idx}/${total}: ${part.length} B ${useWithoutResponse?"withoutResponse":"withResponse"}`);
-      if(useWithoutResponse) await writeChar.writeValueWithoutResponse(part);
-      else await writeChar.writeValue(part);
-      currentJob.writes++;
-      currentJob.bytesSent+=part.length;
-      updateDiag();
-      await sleep(CHUNK_DELAY_MS);
-      const pct=Math.min(100,Math.round((i+CHUNK_SIZE)/stream.length*100));
-      setStatus(`${label} · ${p.H} líneas · ${(stream.length/1024).toFixed(1)} KB — ${pct}%`);
+    let idx=1;
+    for(let s=0;s<segments.length;s++){
+      const segment=segments[s];
+      logDiag(`SEGMENT ${s+1}/${segments.length}: lines ${segment.startLine+1}-${segment.startLine+segment.lines}, ${segment.bytes.length} B`);
+      for(let i=0;i<segment.bytes.length;i+=CHUNK_SIZE,idx++){
+        if(abortRequested) throw new Error("Abortado por el usuario");
+        await waitForFlowCredit();
+        if(abortRequested) throw new Error("Abortado por el usuario");
+        const part=segment.bytes.subarray(i,i+CHUNK_SIZE);
+        logDiag(`BLE write ${idx}/${total}: ${part.length} B ${useWithoutResponse?"withoutResponse":"withResponse"}`);
+        if(useWithoutResponse) await writeChar.writeValueWithoutResponse(part);
+        else await writeChar.writeValue(part);
+        currentJob.writes++;
+        currentJob.bytesSent+=part.length;
+        updateDiag();
+        await sleep(CHUNK_DELAY_MS);
+        const pct=Math.min(100,Math.round(currentJob.bytesSent/stream.length*100));
+        setStatus(`${label} · ${p.H} líneas · ${(stream.length/1024).toFixed(1)} KB — ${pct}%`);
+      }
     }
     setPrintState("finishing");
     currentJob.finishedAt=performance.now();
